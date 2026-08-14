@@ -9,6 +9,7 @@ export const supabase = supabaseUrl && supabasePublishableKey
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: 'pkce',
       },
     })
   : null
@@ -17,7 +18,10 @@ export async function signInWithGoogle() {
   if (!supabase) return { data: null, error: new Error('Supabase is not configured') }
   return supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: window.location.origin },
+    options: {
+      redirectTo: `${window.location.origin}/`,
+      queryParams: { access_type: 'offline', prompt: 'select_account' },
+    },
   })
 }
 
@@ -31,7 +35,7 @@ export async function signUpWithEmail(email: string, password: string) {
   return supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: window.location.origin },
+    options: { emailRedirectTo: `${window.location.origin}/` },
   })
 }
 
