@@ -2,6 +2,8 @@
 -- Hardens RPC privileges and adds indexes for the new scheduling workflow.
 
 alter function public.validate_patient_tenant() set search_path = '';
+revoke all on function public.validate_patient_tenant() from public, anon;
+grant execute on function public.validate_patient_tenant() to authenticated;
 
 revoke all on function public.bootstrap_my_clinic(text, text) from public, anon;
 grant execute on function public.bootstrap_my_clinic(text, text) to authenticated;
