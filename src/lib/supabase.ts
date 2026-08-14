@@ -33,7 +33,7 @@ export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: \`\${appOrigin}/\`,
+      redirectTo: `\${appOrigin}/`,
       queryParams: { prompt: 'select_account' },
     },
   })
