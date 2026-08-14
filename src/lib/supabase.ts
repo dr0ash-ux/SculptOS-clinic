@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://omydecuentoysmuptstu.supabase.co'
-const supabasePublishableKey = 'sb_publishable_8HjvXK9YAj58qCnCoVn8w_akeC4pfr'
 
-// This is a browser-only Vite SPA. We handle the implicit OAuth callback
-// explicitly so there is no race with Supabase's automatic URL detection.
+// Use the publishable key that is actually registered on the SculptOS Supabase project.
+// The previous value had several characters transposed, which allowed the OAuth
+// redirect to start but prevented the browser from establishing the returned session.
+const supabasePublishableKey = 'sb_publishable_8HjvXkY9UAj58qCnCoVn8w_akeC4pfr'
+
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
@@ -23,13 +25,13 @@ const appOrigin = isLocalhost
   : 'https://sculptosclinic.vercel.app'
 
 export async function handleOAuthCallback() {
-  const hash = window.location.hash.startsWith('#')
+  const rawHash = window.location.hash.startsWith('#')
     ? window.location.hash.slice(1)
     : window.location.hash
 
-  if (!hash) return null
+  if (!rawHash) return null
 
-  const params = new URLSearchParams(hash)
+  const params = new URLSearchParams(rawHash)
   const accessToken = params.get('access_token')
   const refreshToken = params.get('refresh_token')
 
@@ -41,7 +43,11 @@ export async function handleOAuthCallback() {
   })
 
   if (!error) {
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname + window.location.search,
+    )
   }
 
   return { data, error }
