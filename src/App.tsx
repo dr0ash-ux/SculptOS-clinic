@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Activity, Bell, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, FlaskConical, LayoutDashboard, Menu, Moon, Package, Phone, Plus, Search, Settings, ShieldCheck, Sun, Users, WalletCards, X } from 'lucide-react'
-import { signInWithGoogle } from './lib/supabase'
+import { useEffect, useMemo, useState } from 'react'
+import { Activity, Bell, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, FlaskConical, LayoutDashboard, Menu, Moon, Package, Phone, Plus, Search, Settings, ShieldCheck, Sun, Users, WalletCards } from 'lucide-react'
+import { signInWithEmail, signInWithGoogle, signUpWithEmail, supabase } from './lib/supabase'
 
 type View = 'dashboard'|'patients'|'appointments'|'inventory'|'finance'|'crm'|'ai'|'prescriptions'|'reports'|'settings'
 type Patient = { name:string; id:string; age:number; sex:string; treatment:string; next:string; status:string }
@@ -30,15 +30,33 @@ function App(){
   const [view,setView]=useState<View>('dashboard')
   const [dark,setDark]=useState(true)
   const [login,setLogin]=useState(true)
+  const [authLoading,setAuthLoading]=useState(true)
   const [sidebar,setSidebar]=useState(true)
   const [query,setQuery]=useState('')
   const [week,setWeek]=useState(0)
+
+  useEffect(()=>{
+    if(!supabase){setAuthLoading(false);return}
+    let active=true
+    supabase.auth.getSession().then(({data})=>{
+      if(!active)return
+      setLogin(!data.session)
+      setAuthLoading(false)
+    })
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{
+      setLogin(!session)
+      setAuthLoading(false)
+    })
+    return ()=>{active=false;subscription.unsubscribe()}
+  },[])
 
   const filteredPatients=useMemo(()=>patients.filter(p=>(p.name+p.id+p.treatment).toLowerCase().includes(query.toLowerCase())),[query])
   const nav:[View,string,typeof LayoutDashboard][]=[
     ['dashboard','Overview',LayoutDashboard],['appointments','Appointments',CalendarDays],['patients','Patients',Users],['crm','CRM',ClipboardList],['inventory','Inventory',Package],['prescriptions','Pharmacy & Rx',FlaskConical],['finance','Finance',WalletCards],['ai','AI Studio',Activity],['reports','Reports',FileText]
   ]
-  if(login) return <Login onLogin={()=>setLogin(false)} dark={dark} setDark={setDark}/>
+
+  if(authLoading) return <div className={dark?'login dark':'login'}><div className="login-panel loading-panel"><div className="brand-mark">S</div><div className="auth-loading">Loading secure workspace…</div></div></div>
+  if(login) return <Login dark={dark} setDark={setDark}/>
 
   return <div className={dark?'app dark':'app'}>
     <aside className={sidebar?'sidebar':'sidebar collapsed'}>
@@ -47,10 +65,8 @@ function App(){
       <nav>{nav.map(([id,label,Icon])=><button key={id} className={view===id?'nav-item active':'nav-item'} onClick={()=>setView(id)}><Icon size={18}/>{sidebar&&<span>{label}</span>}</button>)}</nav>
       <div className="side-bottom"><button className="nav-item" onClick={()=>setView('settings')}><Settings size={18}/>{sidebar&&<span>Settings</span>}</button><div className="profile-mini"><div className="avatar">AJ</div>{sidebar&&<div><b>Dr. Aishwarya Jain</b><span>Administrator</span></div>}</div></div>
     </aside>
-
     <main>
       <header className="topbar"><button className="icon-btn" onClick={()=>setSidebar(!sidebar)}><Menu size={19}/></button><div className="crumb"><b>{view==='dashboard'?'Good morning, Dr. Jain':nav.find(n=>n[0]===view)?.[1]||'Settings'}</b><span>Friday, 14 August 2026</span></div><div className="top-actions"><div className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search patients, records..."/></div><button className="icon-btn"><Bell size={18}/><i/></button><button className="icon-btn" onClick={()=>setDark(!dark)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button><div className="avatar large">AJ</div></div></header>
-
       {view==='dashboard'&&<Dashboard setView={setView}/>} 
       {view==='appointments'&&<Appointments week={week} setWeek={setWeek}/>} 
       {view==='patients'&&<Patients patients={filteredPatients} query={query}/>} 
@@ -65,7 +81,29 @@ function App(){
   </div>
 }
 
-function Login({onLogin,dark,setDark}:{onLogin:()=>void;dark:boolean;setDark:(v:boolean)=>void}){return <div className={dark?'login dark':'login'}><div className="login-visual"><div className="visual-overlay"><div className="eyebrow">SCULPTOS · CLINIC</div><h1>Precision, <em>beautifully</em> managed.</h1><p>A clinical operating system designed around the way modern dental teams actually work.</p><div className="anatomy-card"><span>CLINICAL INTELLIGENCE</span><b>Patient care, without the friction.</b></div></div></div><div className="login-panel"><div className="login-head"><div className="brand-mark">S</div><button className="icon-btn" onClick={()=>setDark(!dark)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button></div><div className="login-copy"><span>WELCOME BACK</span><h2>Your clinic,<br/>at a glance.</h2><p>Sign in to continue to SculptOS.</p></div><div className="auth-card"><label>Email address</label><input placeholder="doctor@clinic.com" type="email"/><label>Password</label><input placeholder="••••••••" type="password"/><div className="auth-row"><label className="check"><input type="checkbox"/> Remember me</label><a>Forgot password?</a></div><button className="primary full" onClick={onLogin}>Sign in <ChevronRight size={17}/></button><div className="divider"><span>or</span></div><button className="google full" onClick={async()=>{await signInWithGoogle();onLogin()}}><span className="g">G</span> Continue with Google</button><small>By continuing, you agree to SculptOS' terms and privacy policy.</small></div><div className="login-footer"><ShieldCheck size={15}/> Secure clinical workspace</div></div></div>}
+function Login({dark,setDark}:{dark:boolean;setDark:(v:boolean)=>void}){
+  const [mode,setMode]=useState<'signin'|'signup'>('signin')
+  const [email,setEmail]=useState('')
+  const [password,setPassword]=useState('')
+  const [busy,setBusy]=useState(false)
+  const [message,setMessage]=useState('')
+
+  const submit=async()=>{
+    setBusy(true);setMessage('')
+    const result=mode==='signin'?await signInWithEmail(email,password):await signUpWithEmail(email,password)
+    setBusy(false)
+    if(result.error){setMessage(result.error.message);return}
+    if(mode==='signup') setMessage('Account created. Check your email to confirm your address, then sign in.')
+  }
+
+  const google=async()=>{
+    setBusy(true);setMessage('')
+    const result=await signInWithGoogle()
+    if(result.error){setBusy(false);setMessage(result.error.message)}
+  }
+
+  return <div className={dark?'login dark':'login'}><div className="login-visual"><div className="visual-overlay"><div className="eyebrow">SCULPTOS · CLINIC</div><h1>Precision, <em>beautifully</em> managed.</h1><p>A clinical operating system designed around the way modern dental teams actually work.</p><div className="anatomy-card"><span>CLINICAL INTELLIGENCE</span><b>Patient care, without the friction.</b></div></div></div><div className="login-panel"><div className="login-head"><div className="brand-mark">S</div><button className="icon-btn" onClick={()=>setDark(!dark)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button></div><div className="login-copy"><span>{mode==='signin'?'WELCOME BACK':'CREATE YOUR ACCOUNT'}</span><h2>{mode==='signin'?<>Your clinic,<br/>at a glance.</>:<>Build your<br/>SculptOS workspace.</>}</h2><p>{mode==='signin'?'Sign in securely to continue.':'Create your SculptOS account to get started.'}</p></div><div className="auth-card"><label>Email address</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="doctor@clinic.com" type="email" autoComplete="email"/><label>Password</label><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" type="password" autoComplete={mode==='signin'?'current-password':'new-password'}/>{mode==='signin'&&<div className="auth-row"><label className="check"><input type="checkbox"/> Remember me</label><a>Forgot password?</a></div>}{message&&<div className="auth-message">{message}</div>}<button className="primary full" disabled={busy||!email||!password} onClick={submit}>{busy?'Please wait…':mode==='signin'?'Sign in':'Create account'} <ChevronRight size={17}/></button><div className="divider"><span>or</span></div><button className="google full" disabled={busy} onClick={google}><span className="g">G</span> Continue with Google</button><button className="auth-switch" onClick={()=>{setMode(mode==='signin'?'signup':'signin');setMessage('')}}>{mode==='signin'?"Don't have an account? Sign up":"Already have an account? Sign in"}</button><small>By continuing, you agree to SculptOS' terms and privacy policy.</small></div><div className="login-footer"><ShieldCheck size={15}/> Secure clinical workspace</div></div></div>
+}
 
 function Dashboard({setView}:{setView:(v:View)=>void}){return <section className="page"><div className="hero-row"><div><div className="eyebrow">FRIDAY · 14 AUGUST</div><h1>Today at the clinic.</h1><p className="muted">A clear view of your schedule, patients and practice health.</p></div><button className="primary" onClick={()=>setView('appointments')}><Plus size={17}/> New appointment</button></div><div className="metric-grid"><Metric label="Today's appointments" value="18" delta="+12%" icon={CalendarDays}/><Metric label="Patients checked in" value="07" delta="On pace" icon={Users}/><Metric label="Today's production" value="₹84,600" delta="+8.4%" icon={WalletCards}/><Metric label="Open treatment value" value="₹12.8L" delta="32 plans" icon={Activity}/></div><div className="content-grid"><div className="panel schedule-panel"><div className="panel-head"><div><h3>Today's schedule</h3><span>3 doctors · 18 appointments</span></div><button className="ghost" onClick={()=>setView('appointments')}>Full calendar <ChevronRight size={15}/></button></div><div className="mini-schedule">{appointments.filter(a=>a.day===0).map((a,i)=><div className={`mini-event ${doctors[a.doctor].tone}`} key={i}><span>{`${8+a.start}:00`}</span><div><b>{a.patient}</b><small>{a.treatment}</small></div><em>{a.duration*60} min</em></div>)}</div></div><div className="panel focus"><div className="panel-head"><div><h3>Practice focus</h3><span>This month</span></div><Activity size={18}/></div><div className="donut"><div><b>₹18.4L</b><span>production</span></div></div><div className="legend"><span><i className="dot teal"/>Collections <b>86%</b></span><span><i className="dot violet"/>Treatment acceptance <b>72%</b></span><span><i className="dot amber"/>New patients <b>41</b></span></div></div></div><div className="panel quick"><div className="panel-head"><div><h3>Quick actions</h3><span>Common workflows</span></div></div><div className="quick-grid">{[['patients','Add patient',Users],['appointments','Book appointment',CalendarDays],['prescriptions','Write prescription',FlaskConical],['inventory','Add inventory',Package]].map(([v,l,I])=><button key={l} onClick={()=>setView(v as View)}><I size={19}/><span>{l}</span><ChevronRight size={15}/></button>)}</div></div></section>}
 function Metric({label,value,delta,icon:Icon}:{label:string;value:string;delta:string;icon:any}){return <div className="metric"><div className="metric-icon"><Icon size={18}/></div><span>{label}</span><b>{value}</b><small>{delta}</small></div>}
