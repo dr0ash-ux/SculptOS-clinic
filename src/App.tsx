@@ -1,135 +1,328 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Activity, Bell, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText, FlaskConical, LayoutDashboard, Menu, Moon, Package, Phone, Plus, Search, Settings, ShieldCheck, Sun, Users, WalletCards } from 'lucide-react'
-import { signInWithEmail, signInWithGoogle, signUpWithEmail, supabase } from './lib/supabase'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  Activity, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, FileText,
+  LayoutDashboard, LogOut, Menu, Moon, Package, Plus, Search, Settings,
+  Sun, UserRound, Users, WalletCards, X,
+} from 'lucide-react'
+import { signInWithGoogle, signOut, supabase } from './lib/supabase'
 
-type View = 'dashboard'|'patients'|'appointments'|'inventory'|'finance'|'crm'|'ai'|'prescriptions'|'reports'|'settings'
-type Patient = { name:string; id:string; age:number; sex:string; treatment:string; next:string; status:string }
-
-const patients: Patient[] = [
-  {name:'Aarav Mehta',id:'SC-1042',age:28,sex:'M',treatment:'Surgical extraction · 48',next:'Today · 10:30',status:'Confirmed'},
-  {name:'Nisha Kapoor',id:'SC-1098',age:34,sex:'F',treatment:'RCT · 16',next:'Today · 11:30',status:'Checked in'},
-  {name:'Rohan Shah',id:'SC-1107',age:22,sex:'M',treatment:'Orthognathic consult',next:'Today · 13:00',status:'Confirmed'},
-  {name:'Diya Rao',id:'SC-1113',age:41,sex:'F',treatment:'Implant planning · 36',next:'Tomorrow · 09:00',status:'Pending'},
-]
+type View = 'dashboard' | 'appointments' | 'patients' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings'
+type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
+type Patient = {
+  id: string; patient_number: string; first_name: string; last_name: string | null; date_of_birth: string | null
+  sex: string | null; phone: string | null; email: string | null; location: string | null; occupation: string | null
+  referral_source: string | null; chief_complaint: string | null; history_present_illness: string | null
+  medical_history: string | null; clinical_findings: string | null; primary_diagnosis: string | null
+  final_diagnosis: string | null; treatment_advised: string | null; timeline_notes: string | null; status: string
+}
+type Appointment = {
+  id: string; patient_id: string; clinician_name: string; clinician_color: 'teal' | 'violet' | 'amber'
+  scheduled_at: string; duration_minutes: number; treatment_label: string; status: string; notes: string | null
+}
+type Slot = { date: Date; label: string }
 
 const doctors = [
-  {name:'Dr. Agarwal',tone:'violet'}, {name:'Dr. Jain',tone:'teal'}, {name:'Dr. Reddy',tone:'amber'}
+  { name: 'Dr. Aishwarya Jain', color: 'teal' as const },
+  { name: 'Dr. Agarwal', color: 'violet' as const },
+  { name: 'Dr. Reddy', color: 'amber' as const },
 ]
+const timeLabels = Array.from({ length: 22 }, (_, index) => {
+  const total = 8 * 60 + index * 30
+  return \`\${String(Math.floor(total / 60)).padStart(2, '0')}:\${String(total % 60).padStart(2, '0')}\`
+})
+const emptyPatient = {
+  first_name: '', last_name: '', date_of_birth: '', sex: '', phone: '', email: '', location: '', occupation: '',
+  referral_source: '', chief_complaint: '', history_present_illness: '', medical_history: '', clinical_findings: '',
+  primary_diagnosis: '', final_diagnosis: '', treatment_advised: '', timeline_notes: '',
+}
 
-const slots = Array.from({length:11},(_,i)=>`${String(i+8).padStart(2,'0')}:00`)
-const appointments = [
-  {day:0,start:1,duration:2,doctor:0,patient:'Aarav Mehta',treatment:'Surgical extraction · 48'},
-  {day:0,start:3,duration:1,doctor:1,patient:'Nisha Kapoor',treatment:'RCT · 16'},
-  {day:1,start:2,duration:2,doctor:2,patient:'Kabir Singh',treatment:'Implant placement · 36'},
-  {day:2,start:4,duration:2,doctor:0,patient:'Rohan Shah',treatment:'Orthognathic consult'},
-  {day:3,start:1,duration:1,doctor:1,patient:'Diya Rao',treatment:'Post-op review'},
-  {day:4,start:5,duration:2,doctor:2,patient:'Meera Nair',treatment:'Full mouth rehabilitation'},
-]
+function startOfWeek(input: Date) {
+  const date = new Date(input)
+  const day = date.getDay() || 7
+  date.setHours(0, 0, 0, 0)
+  date.setDate(date.getDate() - day + 1)
+  return date
+}
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+function dateKey(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+function initials(name?: string | null) {
+  return (name || 'SculptOS').split(' ').filter(Boolean).slice(0, 2).map(word => word[0]).join('').toUpperCase()
+}
+function patientName(patient?: Patient) {
+  return patient ? \`\${patient.first_name} \${patient.last_name || ''}\`.trim() : 'Unknown patient'
+}
+function formatShortDate(value: Date) {
+  return value.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+}
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
 
-function App(){
-  const [view,setView]=useState<View>('dashboard')
-  const [dark,setDark]=useState(true)
-  const [login,setLogin]=useState(true)
-  const [authLoading,setAuthLoading]=useState(true)
-  const [sidebar,setSidebar]=useState(true)
-  const [query,setQuery]=useState('')
-  const [week,setWeek]=useState(0)
+export default function App() {
+  const [dark, setDark] = useState(true)
+  const [view, setView] = useState<View>('dashboard')
+  const [sidebar, setSidebar] = useState(true)
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [profileName, setProfileName] = useState('Dr. Aishwarya Jain')
+  const [email, setEmail] = useState('')
+  const [patients, setPatients] = useState<Patient[]>([])
+  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
+  const [query, setQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [notice, setNotice] = useState('')
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
+  const [patientModalOpen, setPatientModalOpen] = useState(false)
+  const [appointmentSlot, setAppointmentSlot] = useState<Slot | null>(null)
 
-  useEffect(()=>{
-    let active=true
+  const loadRecords = useCallback(async (activeWorkspace: Workspace) => {
+    const [patientResponse, appointmentResponse] = await Promise.all([
+      supabase.from('patients').select('*').eq('clinic_id', activeWorkspace.clinicId).order('created_at', { ascending: false }),
+      supabase.from('appointments').select('*').eq('clinic_id', activeWorkspace.clinicId).order('scheduled_at'),
+    ])
+    if (patientResponse.error) setNotice(patientResponse.error.message)
+    if (appointmentResponse.error) setNotice(appointmentResponse.error.message)
+    setPatients((patientResponse.data || []) as Patient[])
+    setAppointments((appointmentResponse.data || []) as Appointment[])
+  }, [])
 
-    const initializeAuth = async () => {
-      if (!supabase) {
-        if (active) setAuthLoading(false)
-        return
-      }
-
-      // OAuth callback is consumed in src/main.tsx BEFORE React mounts.
-      // App only reads the resulting session here, avoiding a second
-      // setSession() call racing with the bootstrap callback.
-      const { data, error } = await supabase.auth.getSession()
-      if (error) console.error('Supabase getSession failed:', error)
-      if (!active) return
-
-      setLogin(!data.session)
-      setAuthLoading(false)
+  const initializeWorkspace = useCallback(async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
+    const fullName = typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name
+      : typeof user.user_metadata?.name === 'string' ? user.user_metadata.name : 'Dr. Aishwarya Jain'
+    const { data, error } = await supabase.rpc('bootstrap_my_clinic', {
+      p_clinic_name: 'My SculptOS Clinic',
+      p_full_name: fullName,
+    })
+    if (error) {
+      setNotice(error.message)
+      return
     }
+    const row = data?.[0]
+    if (!row) {
+      setNotice('Your clinic workspace could not be opened.')
+      return
+    }
+    const nextWorkspace = {
+      organizationId: row.organization_id,
+      clinicId: row.clinic_id,
+      clinicName: row.clinic_name,
+      role: row.role,
+    } as Workspace
+    const profileResponse = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
+    setProfileName(profileResponse.data?.full_name || fullName)
+    setEmail(user.email || '')
+    setWorkspace(nextWorkspace)
+    await loadRecords(nextWorkspace)
+  }, [loadRecords])
 
-    initializeAuth()
+  useEffect(() => {
+    let alive = true
+    const begin = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (data.session?.user && alive) await initializeWorkspace(data.session.user)
+      if (alive) setLoading(false)
+    }
+    begin()
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!alive) return
+      if (session?.user) {
+        setLoading(true)
+        await initializeWorkspace(session.user)
+        if (alive) setLoading(false)
+      } else {
+        setWorkspace(null)
+        setPatients([])
+        setAppointments([])
+        setLoading(false)
+      }
+    })
+    return () => {
+      alive = false
+      listener.subscription.unsubscribe()
+    }
+  }, [initializeWorkspace])
 
-    const {data:{subscription}}=supabase?.auth.onAuthStateChange((_event,session)=>{
-      if (!active) return
-      setLogin(!session)
-      setAuthLoading(false)
-    }) ?? {data:{subscription:{unsubscribe(){}}}}
+  const selectedPatient = patients.find(patient => patient.id === selectedPatientId) || null
+  const filteredPatients = useMemo(() => patients.filter(patient =>
+    \`\${patientName(patient)} \${patient.patient_number} \${patient.treatment_advised || ''}\`.toLowerCase().includes(query.toLowerCase()),
+  ), [patients, query])
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
 
-    return ()=>{active=false;subscription.unsubscribe()}
-  },[])
+  const openPatient = (patientId: string) => {
+    setSelectedPatientId(patientId)
+    setView('patients')
+  }
+  const createAppointment = async (entry: Omit<Appointment, 'id'>) => {
+    if (!workspace) return
+    const { data, error } = await supabase.from('appointments').insert({
+      ...entry,
+      organization_id: workspace.organizationId,
+      clinic_id: workspace.clinicId,
+      created_by: (await supabase.auth.getUser()).data.user?.id,
+    }).select().single()
+    if (error) {
+      setNotice(error.message)
+      return
+    }
+    setAppointments(current => [...current, data as Appointment].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)))
+    setAppointmentSlot(null)
+    setNotice('Appointment booked and added to the weekly schedule.')
+  }
+  const createPatient = async (values: typeof emptyPatient) => {
+    if (!workspace) return
+    const user = (await supabase.auth.getUser()).data.user
+    const patientNumber = \`SC-\${String(Date.now()).slice(-6)}\`
+    const { data, error } = await supabase.from('patients').insert({
+      ...values,
+      organization_id: workspace.organizationId,
+      clinic_id: workspace.clinicId,
+      created_by: user?.id,
+      patient_number: patientNumber,
+      status: 'active',
+      date_of_birth: values.date_of_birth || null,
+    }).select().single()
+    if (error) {
+      setNotice(error.message)
+      return
+    }
+    const patient = data as Patient
+    setPatients(current => [patient, ...current])
+    setSelectedPatientId(patient.id)
+    setPatientModalOpen(false)
+    setView('patients')
+    setNotice('Patient record saved.')
+  }
+  const handleLogout = async () => {
+    const { error } = await signOut()
+    if (error) setNotice(error.message)
+  }
 
-  const filteredPatients=useMemo(()=>patients.filter(p=>(p.name+p.id+p.treatment).toLowerCase().includes(query.toLowerCase())),[query])
-  const nav:[View,string,typeof LayoutDashboard][]=[
-    ['dashboard','Overview',LayoutDashboard],['appointments','Appointments',CalendarDays],['patients','Patients',Users],['crm','CRM',ClipboardList],['inventory','Inventory',Package],['prescriptions','Pharmacy & Rx',FlaskConical],['finance','Finance',WalletCards],['ai','AI Studio',Activity],['reports','Reports',FileText]
+  if (loading) return <div className={dark ? 'login dark' : 'login'}><div className="loading-card"><div className="brand-mark">S</div><p>Opening your secure clinic workspace…</p></div></div>
+  if (!workspace) return <Login dark={dark} setDark={setDark} notice={notice} />
+
+  const nav: Array<[View, string, typeof LayoutDashboard]> = [
+    ['dashboard', 'Overview', LayoutDashboard], ['appointments', 'Appointments', CalendarDays], ['patients', 'Patients', Users],
+    ['crm', 'CRM', ClipboardList], ['inventory', 'Inventory', Package], ['prescriptions', 'Pharmacy & Rx', FileText],
+    ['finance', 'Finance', WalletCards], ['ai', 'AI Studio', Activity], ['reports', 'Reports', FileText],
   ]
 
-  if(authLoading) return <div className={dark?'login dark':'login'}><div className="login-panel loading-panel"><div className="brand-mark">S</div><div className="auth-loading">Loading secure workspace…</div></div></div>
-  if(login) return <Login dark={dark} setDark={setDark}/>
-
-  return <div className={dark?'app dark':'app'}>
-    <aside className={sidebar?'sidebar':'sidebar collapsed'}>
-      <div className="brand"><div className="brand-mark">S</div>{sidebar&&<div><b>SculptOS</b><span>CLINIC</span></div>}</div>
-      <div className="workspace">{sidebar&&<><span>WORKSPACE</span><button className="clinic-switch">MaxFac Studio <ChevronRight size={14}/></button></>}</div>
-      <nav>{nav.map(([id,label,Icon])=><button key={id} className={view===id?'nav-item active':'nav-item'} onClick={()=>setView(id)}><Icon size={18}/>{sidebar&&<span>{label}</span>}</button>)}</nav>
-      <div className="side-bottom"><button className="nav-item" onClick={()=>setView('settings')}><Settings size={18}/>{sidebar&&<span>Settings</span>}</button><div className="profile-mini"><div className="avatar">AJ</div>{sidebar&&<div><b>Dr. Aishwarya Jain</b><span>Administrator</span></div>}</div></div>
+  return <div className={dark ? 'app dark' : 'app'}>
+    <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'}>
+      <div className="brand"><div className="brand-mark">S</div>{sidebar && <div><b>SculptOS</b><span>CLINIC</span></div>}</div>
+      {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => setView('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
+      <nav>{nav.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav-item active' : 'nav-item'} onClick={() => setView(id)}><Icon size={18} />{sidebar && <span>{label}</span>}</button>)}</nav>
+      <div className="side-bottom">
+        <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings size={18} />{sidebar && <span>Settings</span>}</button>
+        <button className="nav-item logout" onClick={handleLogout}><LogOut size={18} />{sidebar && <span>Log out</span>}</button>
+        <div className="profile-mini"><div className="avatar">{initials(profileName)}</div>{sidebar && <div><b>{profileName}</b><span>{workspace.role}</span></div>}</div>
+      </div>
     </aside>
     <main>
-      <header className="topbar"><button className="icon-btn" onClick={()=>setSidebar(!sidebar)}><Menu size={19}/></button><div className="crumb"><b>{view==='dashboard'?'Good morning, Dr. Jain':nav.find(n=>n[0]===view)?.[1]||'Settings'}</b><span>Friday, 14 August 2026</span></div><div className="top-actions"><div className="search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search patients, records..."/></div><button className="icon-btn"><Bell size={18}/><i/></button><button className="icon-btn" onClick={()=>setDark(!dark)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button><div className="avatar large">AJ</div></div></header>
-      {view==='dashboard'&&<><Dashboard setView={setView}/><WeeklyScheduler/></>} 
-      {view==='patients'&&<Patients patients={filteredPatients}/>} 
-      {view==='appointments'&&<Appointments week={week} setWeek={setWeek}/>} 
-      {view==='inventory'&&<Inventory/>} 
-      {view==='finance'&&<Finance/>} 
-      {view==='crm'&&<CRM/>} 
-      {view==='ai'&&<AIStudio/>} 
-      {view==='prescriptions'&&<Prescriptions/>} 
-      {view==='reports'&&<Reports/>} 
-      {view==='settings'&&<SettingsPage/>}
+      <header className="topbar">
+        <button className="icon-btn" aria-label="Toggle navigation" onClick={() => setSidebar(value => !value)}><Menu size={19} /></button>
+        <div className="crumb"><b>{view === 'dashboard' ? \`Good morning, \${profileName.replace(/^Dr\.\s*/, 'Dr. ')}\` : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+        <div className="top-actions"><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="icon-btn" aria-label="Toggle theme" onClick={() => setDark(value => !value)}>{dark ? <Sun size={18} /> : <Moon size={18} />}</button><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
+      </header>
+      {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
+      <div className="page">
+        {view === 'dashboard' && <Dashboard patients={patients} appointments={appointments} setView={setView} setPatientModalOpen={setPatientModalOpen} />}
+        {view === 'appointments' && <section><Hero eyebrow="APPOINTMENTS" title="Weekly calendar" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => setAppointmentSlot({ date: new Date(), label: '' })}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} onOpenPatient={openPatient} onOpenSlot={setAppointmentSlot} /></section>}
+        {view === 'patients' && <PatientsPage patients={filteredPatients} selectedPatient={selectedPatient} onSelect={setSelectedPatientId} onNew={() => setPatientModalOpen(true)} onBook={patient => { setSelectedPatientId(patient.id); setAppointmentSlot({ date: new Date(), label: '' }) }} />}
+        {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
+        {!['dashboard', 'appointments', 'patients', 'settings'].includes(view) && <PlaceholderPage view={view} />}
+      </div>
     </main>
+    {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
+    {appointmentSlot && <AppointmentModal slot={appointmentSlot} patients={patients} selectedPatientId={selectedPatientId} onClose={() => setAppointmentSlot(null)} onSave={createAppointment} />}
   </div>
 }
 
-function Login({dark,setDark}:{dark:boolean;setDark:(v:boolean)=>void}){
-  const [email,setEmail]=useState('')
-  const [password,setPassword]=useState('')
-  const [mode,setMode]=useState<'login'|'signup'>('login')
-  const [loading,setLoading]=useState(false)
-  const [error,setError]=useState('')
-  const submit=async()=>{setLoading(true);setError('');try{const r=mode==='login'?await signInWithEmail(email,password):await signUpWithEmail(email,password);if(r.error)setError(r.error.message)}finally{setLoading(false)}}
-  const google=async()=>{setLoading(true);setError('');const r=await signInWithGoogle();if(r.error){setError(r.error.message);setLoading(false)}}
-  return <div className={dark?'login dark':'login'}><button className="theme-toggle" onClick={()=>setDark(!dark)}>{dark?<Sun size={18}/>:<Moon size={18}/>}</button><div className="login-card"><div className="login-brand"><div className="brand-mark">S</div><div><b>SculptOS</b><span>CLINIC</span></div></div><h1>{mode==='login'?'Welcome back':'Create your account'}</h1><p>{mode==='login'?'Sign in to your clinic workspace':'Start your SculptOS clinic workspace'}</p><button className="google" onClick={google} disabled={loading}><span className="google-g">G</span>{loading?'Connecting…':'Continue with Google'}</button><div className="divider"><span>or</span></div><label>Email</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@clinic.com"/><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/><button className="primary" onClick={submit} disabled={loading}>{mode==='login'?'Sign in':'Create account'}</button>{error&&<div className="error">{error}</div>}<button className="link-btn" onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode==='login'?'Need an account? Create one':'Already have an account? Sign in'}</button><small>By continuing, you agree to the SculptOS terms and privacy policy.</small></div></div>
+function Login({ dark, setDark, notice }: { dark: boolean; setDark: (value: boolean) => void; notice: string }) {
+  const [working, setWorking] = useState(false)
+  const google = async () => {
+    setWorking(true)
+    const { error } = await signInWithGoogle()
+    if (error) setWorking(false)
+  }
+  return <div className={dark ? 'login dark' : 'login'}>
+    <section className="login-visual"><div className="visual-overlay"><span className="eyebrow">SCULPTOS CLINIC</span><h1>Run the clinic.<br /><em>Keep the human.</em></h1><p>Appointments, patient journeys and a calmer clinical day—kept together in one beautiful workspace.</p></div></section>
+    <section className="login-panel"><div className="login-head"><div className="brand"><div className="brand-mark">S</div><div><b>SculptOS</b><span>CLINIC</span></div></div><button className="icon-btn" onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button></div><div className="login-copy"><span>SECURE CLINIC WORKSPACE</span><h2>Welcome back.</h2><p>Sign in with the Google account approved for your clinic.</p>{notice && <p className="login-error">{notice}</p>}<button className="google" onClick={google} disabled={working}><span className="g">G</span>{working ? 'Connecting…' : 'Continue with Google'}</button><small>By continuing, you agree to the SculptOS terms and privacy policy.</small></div></section>
+  </div>
 }
 
-function Dashboard({setView}:{setView:(v:View)=>void}){return <section><div className="hero"><div><span className="eyebrow">CLINIC OVERVIEW</span><h1>Good morning, Dr. Jain</h1><p>Here’s what’s happening across your practice today.</p></div><button className="primary compact" onClick={()=>setView('patients')}><Plus size={16}/> New patient</button></div><div className="stats"><Stat label="Today’s appointments" value="18" delta="+12%"/><Stat label="Patients this month" value="142" delta="+8.4%"/><Stat label="Revenue this month" value="₹4.82L" delta="+15.2%"/><Stat label="Pending follow-ups" value="27" delta="-6.1%"/></div><div className="grid2"><div className="panel"><div className="panel-head"><div><b>Today’s schedule</b><span>18 appointments · 3 doctors</span></div><button onClick={()=>setView('appointments')}>View calendar <ChevronRight size={15}/></button></div><div className="timeline">{appointments.slice(0,4).map((a,i)=><div className="appt-row" key={i}><span>{['09:00','10:00','11:30','13:00'][i]}</span><div><b>{a.patient}</b><small>{a.treatment}</small></div><em>{doctors[a.doctor].name}</em></div>)}</div></div><div className="panel"><div className="panel-head"><div><b>Revenue</b><span>Last 6 months</span></div><span className="positive">+15.2%</span></div><div className="chart"><div className="bars">{[44,52,48,63,70,82].map((h,i)=><i key={i} style={{height:`${h}%`}}/>)}</div><div className="chart-labels"><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span><span>Aug</span></div></div></div></div><div className="grid2"><div className="panel"><div className="panel-head"><div><b>Patient pipeline</b><span>Conversion overview</span></div><button onClick={()=>setView('crm')}>Open CRM <ChevronRight size={15}/></button></div><div className="pipeline"><Pipeline n="48" l="New enquiries"/><Pipeline n="31" l="Consultations"/><Pipeline n="19" l="Treatment plans"/><Pipeline n="12" l="Started treatment"/></div></div><div className="panel"><div className="panel-head"><div><b>Quick actions</b><span>Common workflows</span></div></div><div className="quick"><button onClick={()=>setView('patients')}><Users size={18}/>Add patient</button><button onClick={()=>setView('appointments')}><CalendarDays size={18}/>Book appointment</button><button onClick={()=>setView('ai')}><Activity size={18}/>AI diagnosis</button><button onClick={()=>setView('reports')}><FileText size={18}/>Reports</button></div></div></div></section>}
+function Hero({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
+  return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
+}
 
-function Stat({label,value,delta}:{label:string;value:string;delta:string}){return <div className="stat"><span>{label}</span><b>{value}</b><em>{delta}</em></div>}
-function Pipeline({n,l}:{n:string;l:string}){return <div className="pipe"><b>{n}</b><span>{l}</span></div>}
-function Patients({patients}:{patients:Patient[]}){return <section><div className="hero"><div><span className="eyebrow">PATIENTS</span><h1>Patient management</h1><p>Search and manage your clinic records.</p></div><button className="primary compact"><Plus size={16}/> New patient</button></div><div className="panel table-panel"><div className="table-head"><b>{patients.length} patients</b><button><Search size={15}/> Filter</button></div><table><thead><tr><th>Patient</th><th>ID</th><th>Treatment</th><th>Next visit</th><th>Status</th></tr></thead><tbody>{patients.map(p=><tr key={p.id}><td><b>{p.name}</b><span>{p.age} · {p.sex}</span></td><td>{p.id}</td><td>{p.treatment}</td><td>{p.next}</td><td><em className="pill">{p.status}</em></td></tr>)}</tbody></table></div></section>}
+function Dashboard({ patients, appointments, setView, setPatientModalOpen }: { patients: Patient[]; appointments: Appointment[]; setView: (view: View) => void; setPatientModalOpen: (open: boolean) => void }) {
+  const today = dateKey(new Date())
+  const todayAppointments = appointments.filter(item => item.scheduled_at.slice(0, 10) === today)
+  return <section>
+    <Hero eyebrow="CLINIC OVERVIEW" title="Your clinic, in rhythm." copy="A focused view of today’s people, plans and progress." action={<button className="primary" onClick={() => setPatientModalOpen(true)}><Plus size={16} /> New patient</button>} />
+    <div className="metric-grid"><Metric label="Today’s appointments" value={String(todayAppointments.length)} icon={<CalendarDays size={17} />} /><Metric label="Active patients" value={String(patients.length)} icon={<Users size={17} />} /><Metric label="Pending follow-ups" value="—" icon={<ClipboardList size={17} />} /><Metric label="This month’s revenue" value="—" icon={<WalletCards size={17} />} /></div>
+    <div className="content-grid"><div className="panel"><div className="panel-head"><div><h3>Today’s schedule</h3><span>{todayAppointments.length ? 'Live appointments from your clinic calendar' : 'Your day is clear so far'}</span></div><button className="ghost small" onClick={() => setView('appointments')}>Open calendar</button></div><div className="mini-schedule">{todayAppointments.length ? todayAppointments.slice(0, 5).map(item => <div className={\`mini-event \${item.clinician_color}\`} key={item.id}><span>{formatTime(item.scheduled_at)}</span><div><b>{item.treatment_label}</b><small>{item.clinician_name}</small></div><em>{item.duration_minutes} min</em></div>) : <EmptyState label="No appointments today. Choose a time slot to start your first booking." />}</div></div><div className="panel focus"><div className="panel-head"><div><h3>Patient flow</h3><span>Early clinic snapshot</span></div></div><div className="donut"><div><b>{patients.length}</b><span>records</span></div></div><div className="legend"><span><i className="dot teal" />Active<b>{patients.filter(patient => patient.status === 'active').length}</b></span><span><i className="dot violet" />Appointments<b>{appointments.length}</b></span><span><i className="dot amber" />Needs review<b>—</b></span></div></div></div>
+    <div className="panel quick"><div className="panel-head"><div><h3>Quick actions</h3><span>Common clinical workflows</span></div></div><div className="quick-grid"><button onClick={() => setPatientModalOpen(true)}><Users size={18} /><span>Add a patient</span><ChevronRight size={15} /></button><button onClick={() => setView('appointments')}><CalendarDays size={18} /><span>Book appointment</span><ChevronRight size={15} /></button><button onClick={() => setView('ai')}><Activity size={18} /><span>AI diagnosis</span><ChevronRight size={15} /></button><button onClick={() => setView('reports')}><FileText size={18} /><span>Reports</span><ChevronRight size={15} /></button></div></div>
+  </section>
+}
 
-function Appointments({week,setWeek}:{week:number;setWeek:(n:number)=>void}){const days=['Mon','Tue','Wed','Thu','Fri','Sat'];return <section><div className="hero"><div><span className="eyebrow">APPOINTMENTS</span><h1>Weekly calendar</h1><p>Doctor-coded schedule across your clinic.</p></div><div className="hero-actions"><button className="icon-btn" onClick={()=>setWeek(week-1)}><ChevronLeft size={18}/></button><button className="icon-btn" onClick={()=>setWeek(week+1)}><ChevronRight size={18}/></button><button className="primary compact"><Plus size={16}/> Book appointment</button></div></div><div className="panel calendar"><div className="calendar-grid"><div className="time-col">{slots.map(s=><span key={s}>{s}</span>)}</div>{days.map((d,di)=><div className="day-col" key={d}><header><b>{d}</b><span>{15+di}</span></header>{slots.map((s,si)=><div className="cell" key={s}>{appointments.filter(a=>a.day===di&&a.start===si).map(a=><div className={`booking ${doctors[a.doctor].tone}`} key={a.patient}><b>{a.patient}</b><span>{a.treatment}</span><small>{doctors[a.doctor].name}</small></div>)}</div>)}</div>)}</div></div></section>}
+function Metric({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return <div className="metric"><div className="metric-icon">{icon}</div><span>{label}</span><b>{value}</b></div>
+}
 
-function Inventory(){return <section><div className="hero"><div><span className="eyebrow">INVENTORY</span><h1>Inventory & supplies</h1><p>Stock levels, batches and expiry alerts.</p></div><button className="primary compact"><Plus size={16}/> Add stock</button></div><div className="stats"><Stat label="Items tracked" value="248" delta="+12"/><Stat label="Low stock" value="14" delta="Needs action"/><Stat label="Expiring in 30d" value="7" delta="Watch"/><Stat label="Inventory value" value="₹8.6L" delta="+4.8%"/></div><div className="panel table-panel"><table><thead><tr><th>Item</th><th>Category</th><th>Stock</th><th>Expiry</th><th>Status</th></tr></thead><tbody>{['Lignocaine 2%','Surgical gloves · M','Bone graft · 1g','Suture · 3-0'].map((x,i)=><tr key={x}><td><b>{x}</b></td><td>{['Anaesthetic','Consumable','Implant','Surgical'][i]}</td><td>{[82,240,18,64][i]}</td><td>{['Jan 2027','Mar 2027','Oct 2026','Dec 2026'][i]}</td><td><em className="pill">{i===2?'Low stock':'Healthy'}</em></td></tr>)}</tbody></table></div></section>}
+function Scheduler({ weekDays, setWeekStart, appointments, patients, onOpenPatient, onOpenSlot }: { weekDays: Date[]; setWeekStart: (value: Date) => void; appointments: Appointment[]; patients: Patient[]; onOpenPatient: (id: string) => void; onOpenSlot: (slot: Slot) => void }) {
+  const byDate = useMemo(() => new Map(appointments.map(item => [item.id, item])), [appointments])
+  const goToday = () => setWeekStart(startOfWeek(new Date()))
+  return <div className="calendar-panel"><div className="calendar-toolbar"><div className="doctor-key">{doctors.map(doctor => <span key={doctor.name}><i className={\`dot \${doctor.color}\`} />{doctor.name}</span>)}</div><div className="calendar-actions"><button className="ghost small" onClick={() => setWeekStart(addDays(weekDays[0], -7))}><ChevronLeft size={16} /></button><button className="ghost small" onClick={goToday}>Today</button><button className="ghost small" onClick={() => setWeekStart(addDays(weekDays[0], 7))}><ChevronRight size={16} /></button></div></div><div className="calendar"><div className="time-col"><div className="corner" />{timeLabels.map(time => <div key={time}>{time}</div>)}</div>{weekDays.map(day => <div className="day-col" key={dateKey(day)}><div className={\`day-head \${dateKey(day) === dateKey(new Date()) ? 'today' : ''}\`}><b>{day.toLocaleDateString('en-IN', { weekday: 'short' })}</b><strong>{formatShortDate(day)}</strong></div>{timeLabels.map((time, index) => { const slot = new Date(day); const [hours, minutes] = time.split(':').map(Number); slot.setHours(hours, minutes, 0, 0); const cellAppointments = Array.from(byDate.values()).filter(item => item.scheduled_at.slice(0, 10) === dateKey(day) && Math.floor((new Date(item.scheduled_at).getHours() * 60 + new Date(item.scheduled_at).getMinutes() - 8 * 60) / 30) === index); return <div className="hour" key={time} onClick={() => onOpenSlot({ date: slot, label: time })}>{cellAppointments.map(item => <button className={\`appointment \${item.clinician_color}\`} style={{ height: \`calc(\${item.duration_minutes / 30 * 64}px - 8px)\` }} key={item.id} onClick={event => { event.stopPropagation(); onOpenPatient(item.patient_id) }}><b>{item.treatment_label}</b><span>{patientName(patients.find(patient => patient.id === item.patient_id))}</span><em>{item.clinician_name} · {formatTime(item.scheduled_at)}</em></button>)}</div> })}</div>)}</div></div>
+}
 
-function Finance(){return <section><div className="hero"><div><span className="eyebrow">FINANCE</span><h1>Financial overview</h1><p>Revenue, collections, discounts and leakage.</p></div><button className="primary compact"><CreditCard size={16}/> Export report</button></div><div className="stats"><Stat label="Gross revenue" value="₹5.31L" delta="+15.2%"/><Stat label="Collected" value="₹4.82L" delta="90.8%"/><Stat label="Discounts" value="₹28.4K" delta="5.3%"/><Stat label="Potential missed" value="₹41.7K" delta="Needs action"/></div><div className="panel chart-panel"><div className="panel-head"><div><b>Monthly revenue</b><span>Actual vs potential</span></div></div><div className="big-chart"><div className="bars">{[35,48,42,58,68,84].map((h,i)=><i key={i} style={{height:`${h}%`}}/>)}</div></div></div></section>}
+function PatientsPage({ patients, selectedPatient, onSelect, onNew, onBook }: { patients: Patient[]; selectedPatient: Patient | null; onSelect: (id: string) => void; onNew: () => void; onBook: (patient: Patient) => void }) {
+  return <section><Hero eyebrow="PATIENTS" title="Patient management" copy="Clinical context stays attached to every appointment." action={<button className="primary" onClick={onNew}><Plus size={16} /> New patient</button>} /><div className={selectedPatient ? 'patient-layout selected' : 'patient-layout'}><div className="panel patient-panel"><div className="filter-row"><div><b>{patients.length} patients</b><span>Search using the top bar</span></div></div>{patients.length ? patients.map(patient => <button className={\`patient-row \${selectedPatient?.id === patient.id ? 'selected' : ''}\`} key={patient.id} onClick={() => onSelect(patient.id)}><div className="patient-name"><div className="avatar">{initials(patientName(patient))}</div><div><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone saved'}</span></div></div><div><b>{patient.treatment_advised || 'New consultation'}</b><span>{patient.primary_diagnosis || 'No diagnosis recorded'}</span></div><span className="status green">{patient.status}</span><ChevronRight size={16} /></button>) : <EmptyState label="No patient records yet. Add your first patient to begin the clinic workflow." />}</div>{selectedPatient && <PatientDetail patient={selectedPatient} onBook={() => onBook(selectedPatient)} />}</div></section>
+}
 
-function CRM(){return <section><div className="hero"><div><span className="eyebrow">CRM</span><h1>Patient conversion</h1><p>Follow-ups, enquiries and treatment starts.</p></div><button className="primary compact"><Phone size={16}/> Call queue</button></div><div className="stats"><Stat label="New enquiries" value="48" delta="This month"/><Stat label="Consulted" value="31" delta="64.6%"/><Stat label="Plans sent" value="19" delta="61.3%"/><Stat label="Started" value="12" delta="63.2%"/></div><div className="panel pipeline-panel"><div className="panel-head"><div><b>Follow-up queue</b><span>Patients needing contact</span></div></div>{['Karan Malhotra','Isha Verma','Vivek Rao','Ananya Shah'].map((n,i)=><div className="follow" key={n}><div className="avatar">{n.split(' ').map(x=>x[0]).join('')}</div><div><b>{n}</b><span>{['Implant consult','Aligner enquiry','OMFS consult','Full mouth rehab'][i]}</span></div><em>{['Today','Today','Tomorrow','Aug 17'][i]}</em><button className="icon-btn"><Phone size={16}/></button></div>)}</div></section>}
+function PatientDetail({ patient, onBook }: { patient: Patient; onBook: () => void }) {
+  const sections: Array<[string, string | null]> = [['Chief complaint', patient.chief_complaint], ['History of present illness', patient.history_present_illness], ['Medical history', patient.medical_history], ['Clinical findings', patient.clinical_findings], ['Primary diagnosis', patient.primary_diagnosis], ['Final diagnosis', patient.final_diagnosis], ['Treatment advised', patient.treatment_advised], ['Timeline / notes', patient.timeline_notes]]
+  return <aside className="panel patient-detail"><div className="detail-head"><div className="avatar large">{initials(patientName(patient))}</div><div><h3>{patientName(patient)}</h3><span>{patient.patient_number} · {patient.sex || '—'} · {patient.phone || 'No phone'}</span></div></div><button className="primary full" onClick={onBook}><CalendarDays size={16} /> Book appointment</button><div className="detail-meta"><span>{patient.location || 'Location not added'}</span><span>{patient.occupation || 'Occupation not added'}</span><span>{patient.referral_source || 'No referral source'}</span></div><div className="clinical-notes">{sections.map(([label, value]) => <div key={label}><b>{label}</b><p>{value || 'Not recorded'}</p></div>)}</div></aside>
+}
 
-function AIStudio(){return <section><div className="hero"><div><span className="eyebrow">AI STUDIO</span><h1>Clinical intelligence</h1><p>Diagnosis, differentials and imaging workflows.</p></div></div><div className="grid2"><div className="panel ai-card"><div className="ai-icon"><Activity size={20}/></div><b>Diagnobot</b><span>Build a differential diagnosis from symptoms, history and clinical findings.</span><button className="primary compact">Start analysis <ChevronRight size={15}/></button></div><div className="panel ai-card"><div className="ai-icon"><Search size={20}/></div><b>OPG Reader</b><span>Upload panoramic imaging for structured review and findings.</span><button className="secondary compact">Open reader <ChevronRight size={15}/></button></div><div className="panel ai-card"><div className="ai-icon"><ShieldCheck size={20}/></div><b>CBCT Review</b><span>Basic volumetric review with annotation-ready workflow.</span><button className="secondary compact">Open CBCT <ChevronRight size={15}/></button></div><div className="panel ai-card"><div className="ai-icon"><FileText size={20}/></div><b>Patient summary</b><span>Turn notes and records into a clean clinical summary.</span><button className="secondary compact">Create summary <ChevronRight size={15}/></button></div></div></section>}
+function PatientModal({ onClose, onSave }: { onClose: () => void; onSave: (values: typeof emptyPatient) => Promise<void> }) {
+  const [values, setValues] = useState(emptyPatient)
+  const [saving, setSaving] = useState(false)
+  const update = (key: keyof typeof emptyPatient, value: string) => setValues(current => ({ ...current, [key]: value }))
+  const submit = async (event: FormEvent) => { event.preventDefault(); if (!values.first_name.trim()) return; setSaving(true); await onSave(values); setSaving(false) }
+  const field = (key: keyof typeof emptyPatient, label: string, textarea = false) => <label key={key}>{label}{textarea ? <textarea value={values[key]} onChange={event => update(key, event.target.value)} /> : <input value={values[key]} onChange={event => update(key, event.target.value)} />}</label>
+  return <div className="modal-backdrop" role="presentation"><form className="modal form-modal" onSubmit={submit}><div className="modal-head"><div><span className="eyebrow">NEW PATIENT</span><h2>Create clinical record</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={18} /></button></div><div className="form-grid two">{field('first_name', 'First name')}{field('last_name', 'Last name')}{field('date_of_birth', 'Date of birth')}{field('sex', 'Sex')}{field('phone', 'Phone number')}{field('email', 'Email')}{field('location', 'Location')}{field('occupation', 'Occupation')}{field('referral_source', 'Referred by')}</div><div className="form-section"><h3>Clinical intake</h3><div className="form-grid">{field('chief_complaint', 'Chief complaint', true)}{field('history_present_illness', 'History of present illness', true)}{field('medical_history', 'Medical history', true)}{field('clinical_findings', 'Clinical findings', true)}{field('primary_diagnosis', 'Primary diagnosis', true)}{field('final_diagnosis', 'Final diagnosis', true)}{field('treatment_advised', 'Treatment advised', true)}{field('timeline_notes', 'Timeline / pre-op and post-op notes', true)}</div></div><div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={saving || !values.first_name.trim()}>{saving ? 'Saving…' : 'Save patient'}</button></div></form></div>
+}
 
-function Prescriptions(){return <section><div className="hero"><div><span className="eyebrow">PHARMACY & RX</span><h1>Prescriptions</h1><p>Draft and track patient medication plans.</p></div><button className="primary compact"><Plus size={16}/> New prescription</button></div><div className="panel table-panel"><table><thead><tr><th>Patient</th><th>Medication</th><th>Duration</th><th>Status</th></tr></thead><tbody>{[['Aarav Mehta','Amoxicillin 500mg','5 days'],['Nisha Kapoor','Ibuprofen 400mg','3 days'],['Rohan Shah','Chlorhexidine 0.2%','7 days']].map(([p,m,d])=><tr key={p}><td><b>{p}</b></td><td>{m}</td><td>{d}</td><td><em className="pill">Active</em></td></tr>)}</tbody></table></div></section>}
+function AppointmentModal({ slot, patients, selectedPatientId, onClose, onSave }: { slot: Slot; patients: Patient[]; selectedPatientId: string | null; onClose: () => void; onSave: (entry: Omit<Appointment, 'id'>) => Promise<void> }) {
+  const [patientId, setPatientId] = useState(selectedPatientId || patients[0]?.id || '')
+  const [doctor, setDoctor] = useState(doctors[0])
+  const [duration, setDuration] = useState('30')
+  const [treatment, setTreatment] = useState('Check-up')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const submit = async (event: FormEvent) => { event.preventDefault(); if (!patientId) return; setSaving(true); await onSave({ patient_id: patientId, clinician_name: doctor.name, clinician_color: doctor.color, scheduled_at: slot.date.toISOString(), duration_minutes: Number(duration), treatment_label: treatment || 'Check-up', status: 'confirmed', notes }); setSaving(false) }
+  return <div className="modal-backdrop" role="presentation"><form className="modal appointment-modal" onSubmit={submit}><div className="modal-head"><div><span className="eyebrow">BOOK APPOINTMENT</span><h2>{slot.date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} · {slot.label || formatTime(slot.date.toISOString())}</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={18} /></button></div>{patients.length ? <><label>Patient<select value={patientId} onChange={event => setPatientId(event.target.value)}>{patients.map(patient => <option value={patient.id} key={patient.id}>{patientName(patient)} · {patient.patient_number}</option>)}</select></label><div className="form-grid two"><label>Doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name}>{item.name}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label></div><label>Treatment / visit type<input value={treatment} onChange={event => setTreatment(event.target.value)} placeholder="e.g. Review, extraction, consult" /></label><label>Appointment note<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Optional receptionist or clinical note" /></label><div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={saving}>{saving ? 'Booking…' : 'Book appointment'}</button></div></> : <EmptyState label="Create a patient record first. Appointments are always connected to a patient." />}</form></div>
+}
 
-function Reports(){return <section><div className="hero"><div><span className="eyebrow">REPORTS</span><h1>Clinic reports</h1><p>Performance, revenue and patient activity.</p></div><button className="primary compact"><FileText size={16}/> Generate report</button></div><div className="grid2"><div className="panel report"><b>Revenue report</b><span>Monthly collections, discounts and leakage.</span><button className="secondary compact">Open</button></div><div className="panel report"><b>Patient report</b><span>New, active and returning patient trends.</span><button className="secondary compact">Open</button></div></div></section>}
+function SettingsPage({ profileName, email, clinicName, onSave, onLogout }: { profileName: string; email: string; clinicName: string; onSave: (name: string, clinic: string) => Promise<void>; onLogout: () => void }) {
+  const [name, setName] = useState(profileName)
+  const [clinic, setClinic] = useState(clinicName)
+  const [saving, setSaving] = useState(false)
+  return <section><Hero eyebrow="PERSONALIZATION" title="Make SculptOS yours." copy="Your clinic identity carries through the workspace and future prescriptions." /><form className="panel settings-form" onSubmit={async event => { event.preventDefault(); setSaving(true); await onSave(name, clinic); setSaving(false) }}><div className="settings-avatar"><div className="avatar large">{initials(name)}</div><div><h3>Workspace identity</h3><p>Your account uses Google sign-in. Change your visible clinician and clinic names here.</p></div></div><div className="form-grid two"><label>Clinician name<input value={name} onChange={event => setName(event.target.value)} /></label><label>Clinic name<input value={clinic} onChange={event => setClinic(event.target.value)} /></label><label>Email<input value={email} disabled /></label><label>Timezone<input value="Asia/Kolkata" disabled /></label></div><div className="settings-actions"><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save personalization'}</button><button type="button" className="ghost danger" onClick={onLogout}><LogOut size={16} /> Log out</button></div></form></section>
+}
 
-function SettingsPage(){return <section><div className="hero"><div><span className="eyebrow">SETTINGS</span><h1>Workspace settings</h1><p>Clinic preferences and user access.</p></div></div><div className="panel settings-panel"><div><b>Workspace</b><span>MaxFac Studio</span></div><div><b>Authentication</b><span>Google OAuth enabled</span></div><div><b>Role</b><span>Administrator</span></div></div></section>}
+function PlaceholderPage({ view }: { view: View }) {
+  const labels: Record<string, string> = { inventory: 'Inventory', finance: 'Finance', crm: 'CRM', ai: 'AI Studio', prescriptions: 'Pharmacy & Rx', reports: 'Reports' }
+  return <section><Hero eyebrow="SCULPTOS CLINIC" title={labels[view]} copy="This module is next in the workflow roadmap. Your appointments and patient records are already live." /><div className="panel"><EmptyState label="The clinical core has been connected first: secure sign-in, patient records, appointments, calendar navigation and personalization." /></div></section>
+}
 
-function WeeklyScheduler(){const [week,setWeek]=useState(0);const [filter,setFilter]=useState('all');const [book,setBook]=useState('');const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];const times=Array.from({length:24},(_,i)=>`${String(8+Math.floor(i/2)).padStart(2,'0')}:${i%2?'30':'00'}`);const events=[{day:1,start:14,duration:4,doctor:0,patient:'Aarav Mehta',treatment:'Implant placement'},{day:1,start:15,duration:2,doctor:1,patient:'Nisha Kapoor',treatment:'RCT'},{day:3,start:5,duration:3,doctor:2,patient:'Rohan Shah',treatment:'Surgical review'}].filter(x=>filter==='all'||String(x.doctor)===filter);return <section className="scheduler-wrap"><div className="scheduler-title"><div><span className="eyebrow">CLINICAL SCHEDULE</span><h2>Weekly appointments</h2></div><div><button className="secondary compact" onClick={()=>setWeek(week-1)}><ChevronLeft size={16}/></button><button className="secondary compact" onClick={()=>setWeek(0)}>Today</button><button className="secondary compact" onClick={()=>setWeek(week+1)}><ChevronRight size={16}/></button><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All doctors</option>{doctors.map((d,i)=><option value={String(i)} key={d.name}>{d.name}</option>)}</select></div></div>{book&&<div className="booking-toast">Appointment creation: {book} <button onClick={()=>setBook('')}>×</button></div>}<div className="weekly-grid"><div className="week-corner"/>{days.map((d,i)=><div className={'week-day '+(i===4?'today-col':'')} key={d}><b>{d}</b><span>{17+i+week*7} Aug</span></div>)}{times.map((t,slot)=><><div className="week-time" key={'time'+t}>{t}</div>{days.map((d,day)=><div className="week-cell" key={d+t} onClick={()=>setBook(`${d}, ${17+day+week*7} Aug · ${t}`)}>{events.filter(e=>e.day===day&&e.start===slot).map(e=>{const doc=doctors[e.doctor];return <button className="week-event" style={{height:`calc(${e.duration * 100}% - 4px)`,background:doc.tone==='violet'?'#6f5bd6':doc.tone==='teal'?'#188f7d':'#b7772e'}} onClick={x=>{x.stopPropagation();setBook(`Patient record: ${e.patient}`)}} key={e.patient}><b>{e.treatment}</b><span>{doc.name}</span><small>{e.patient} · {t}</small></button>})}</div>)}</>)}</div></section>}
-
-export default App
+function EmptyState({ label }: { label: string }) {
+  return <div className="empty-state"><Activity size={19} /><p>{label}</p></div>
+}
