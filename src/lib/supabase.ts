@@ -8,7 +8,7 @@ export const supabase = supabaseUrl && supabasePublishableKey
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        detectSessionInUrl: false,
         flowType: 'pkce',
       },
     })
@@ -20,22 +20,8 @@ export async function signInWithGoogle() {
     provider: 'google',
     options: {
       redirectTo: `${window.location.origin}/`,
-      queryParams: { access_type: 'offline', prompt: 'select_account' },
+      queryParams: { prompt: 'select_account' },
     },
-  })
-}
-
-export async function signInWithEmail(email: string, password: string) {
-  if (!supabase) return { data: { user: null, session: null }, error: new Error('Supabase is not configured') }
-  return supabase.auth.signInWithPassword({ email, password })
-}
-
-export async function signUpWithEmail(email: string, password: string) {
-  if (!supabase) return { data: { user: null, session: null }, error: new Error('Supabase is not configured') }
-  return supabase.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo: `${window.location.origin}/` },
   })
 }
 
