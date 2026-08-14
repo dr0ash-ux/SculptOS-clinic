@@ -1,23 +1,84 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://omydecuentoysmuptstu.supabase.co'
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_8HjvXK9UAj58qCnCoVn8w_akeC4pfr'
+// SculptOS is a browser-only Vite SPA. Keep the Supabase project identity
+// explicit so a stale/misconfigured Vercel VITE_* variable cannot point the
+// production build at a different project.
+const supabaseUrl = 'https://omydecuentoysmuptstu.supabase.co'
+const supabasePublishableKey = 'sb_publishable_8HjvXk9UAj58qCnCoVn8w_akeC4pfr'
 
-// Browser-only Vite SPA: use the implicit OAuth flow so the Google callback
-// does not depend on a PKCE verifier surviving the full browser redirect.
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    // Handle the implicit OAuth fragment explicitly below.
+    detectSessionInUrl: false,
     flowType: 'implicit',
   },
 })
 
-// Always return to the site the user is actually visiting. This avoids
-// hard-coding a temporary Vercel deployment hostname and accidentally
-// sending production OAuth callbacks to a different deployment.
-const appOrigin = window.location.origin
+const isLocalhost =
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1'
+
+// Use one stable production URL. Preview/deployment URLs should not be the
+// canonical OAuth destination.
+const appOrigin = isLocalhost
+  ? window.location.origin
+  : 'https://sculptosclinic.vercel.app'
+
+/**
+ * Consume an implicit-flow callback ourselves.
+ * Supabase returns access_token + refresh_token in the URL fragment.
+ * setSession() persists the session, then we remove the credentials from the
+ * address bar without triggering a navigation.
+ */
+async function consumeImplicitCallback() {
+  if (typeof window === 'undefined') return null
+
+  const rawHash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash
+
+  if (!rawHash) return null
+
+  const params = new URLSearchParams(rawHash)
+  const accessToken = params.get('access_token')
+  const refreshToken = params.get('refresh_token')
+
+  if (!accessToken || !refreshToken) return null
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  })
+
+  if (error) throw error
+
+  window.history.replaceState(
+    window.history.state,
+    document.title,
+    `${window.location.pathname}${window.location.search}`,
+  )
+
+  return data.session
+}
+
+// App.tsx already calls supabase.auth.getSession() during startup. Wrap that
+// call so a just-returned OAuth fragment is consumed before App decides that
+// there is no session.
+const originalGetSession = supabase.auth.getSession.bind(supabase.auth)
+supabase.auth.getSession = async () => {
+  try {
+    const callbackSession = await consumeImplicitCallback()
+    if (callbackSession) {
+      return { data: { session: callbackSession }, error: null }
+    }
+  } catch (error) {
+    return { data: { session: null }, error: error as any }
+  }
+
+  return originalGetSession()
+}
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
