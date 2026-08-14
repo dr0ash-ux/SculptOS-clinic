@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
-import { supabase } from './lib/supabase'
+import { supabase, handleOAuthCallback } from './lib/supabase'
 import './index.css'
 
 const stableOrigin = 'https://sculptosclinic.vercel.app'
@@ -12,17 +12,9 @@ const hasOAuthCallback =
   window.location.search.includes('code=')
 
 async function bootstrap() {
-  // If Google has just redirected back with an implicit-flow hash, wait for
-  // Supabase to finish consuming the access/refresh tokens before React mounts.
-  // This prevents App.tsx from briefly seeing "no session" and showing Login.
-  if (supabase) {
-    try {
-      await supabase.auth.getSession()
-    } catch (error) {
-      console.error('Supabase auth initialization failed', error)
-    }
-  }
-
+  // A Vercel deployment alias must be redirected to the stable production
+  // origin BEFORE consuming the OAuth fragment, otherwise the callback can be
+  // initialized on one origin and persisted on another.
   if (!isStableOrigin && hasOAuthCallback) {
     window.location.replace(
       `${stableOrigin}${window.location.pathname}${window.location.search}${window.location.hash}`,
@@ -30,10 +22,26 @@ async function bootstrap() {
     return
   }
 
-  // Supabase has consumed the OAuth hash and persisted the session. It is now
-  // safe to remove the token fragment from the visible URL.
-  if (isStableOrigin && window.location.hash && hasOAuthCallback) {
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+  if (supabase) {
+    try {
+      // For the implicit flow, consume #access_token/#refresh_token BEFORE
+      // mounting React. This guarantees App.tsx cannot render the Login screen
+      // while the OAuth callback is still being hydrated.
+      if (isStableOrigin && hasOAuthCallback) {
+        const callbackResult = await handleOAuthCallback()
+        if (callbackResult?.error) {
+          console.error('Supabase OAuth callback failed', callbackResult.error)
+        }
+      }
+
+      // Confirm the session is available before mounting the application.
+      const { error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Supabase auth initialization failed', error)
+      }
+    } catch (error) {
+      console.error('Supabase auth initialization failed', error)
+    }
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
