@@ -1,20 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 
-// SculptOS is a browser-only Vite SPA. Keep the production Supabase project
-// explicit so a stale Vercel VITE_* variable cannot point at another project.
 const supabaseUrl = 'https://omydecuentoysmuptstu.supabase.co'
 const supabasePublishableKey = 'sb_publishable_8HjvXK9YAj58qCnCoVn8w_akeC4pfr'
 
-// Use Supabase's normal implicit browser callback handling. Supabase will
-// consume the access/refresh tokens returned in the URL fragment, persist the
-// session, and then App.tsx's getSession() will see the authenticated user.
-// Do not manually override getSession() or call setSession() here: doing so can
-// race Supabase's own auth initialization and leave the app on the login page.
+// This is a browser-only Vite SPA. We handle the implicit OAuth callback
+// explicitly so there is no race with Supabase's automatic URL detection.
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
+    detectSessionInUrl: false,
     flowType: 'implicit',
   },
 })
@@ -23,11 +18,34 @@ const isLocalhost =
   window.location.hostname === 'localhost' ||
   window.location.hostname === '127.0.0.1'
 
-// Production uses the stable Vercel domain. Local development keeps its own
-// origin so localhost OAuth continues to work.
 const appOrigin = isLocalhost
   ? window.location.origin
   : 'https://sculptosclinic.vercel.app'
+
+export async function handleOAuthCallback() {
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash
+
+  if (!hash) return null
+
+  const params = new URLSearchParams(hash)
+  const accessToken = params.get('access_token')
+  const refreshToken = params.get('refresh_token')
+
+  if (!accessToken || !refreshToken) return null
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  })
+
+  if (!error) {
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+  }
+
+  return { data, error }
+}
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
