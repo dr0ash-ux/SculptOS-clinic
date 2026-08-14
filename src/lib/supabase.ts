@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Vite variables are preferred. Use || so an accidentally configured empty
-// Vercel variable cannot produce an invalid Supabase client.
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://omydecuentoysmuptstu.supabase.co'
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_8HjvXkY9UAj58qCnCoVn8w_akeC4pfr'
 
@@ -13,6 +11,21 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
     flowType: 'pkce',
   },
 })
+
+// Supabase's PKCE flow returns ?code=... to the application. Explicitly
+// exchange it before the app checks the session, then remove the code from
+// the address bar so refreshes cannot try to consume it again.
+if (typeof window !== 'undefined') {
+  const url = new URL(window.location.href)
+  const code = url.searchParams.get('code')
+  if (code) {
+    void supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+      if (error) console.error('Google OAuth session exchange failed:', error.message)
+      url.searchParams.delete('code')
+      window.history.replaceState({}, document.title, url.toString())
+    })
+  }
+}
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
@@ -32,8 +45,7 @@ export async function signUpWithEmail(email: string, password: string) {
   return supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${window.location.origin}/`,
-    },
+    options: { emailRedirectTo: `${window.location.origin}/` },
   })
 }
 
