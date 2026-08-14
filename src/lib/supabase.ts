@@ -8,8 +8,8 @@ export const supabase = supabaseUrl && supabasePublishableKey
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
-        flowType: 'pkce',
+        detectSessionInUrl: true,
+        flowType: 'implicit',
       },
     })
   : null
@@ -22,6 +22,21 @@ export async function signInWithGoogle() {
       redirectTo: `${window.location.origin}/`,
       queryParams: { prompt: 'select_account' },
     },
+  })
+}
+
+// Kept internally for backwards compatibility; email/password is not exposed in the UI.
+export async function signInWithEmail(email: string, password: string) {
+  if (!supabase) return { data: { user: null, session: null }, error: new Error('Supabase is not configured') }
+  return supabase.auth.signInWithPassword({ email, password })
+}
+
+export async function signUpWithEmail(email: string, password: string) {
+  if (!supabase) return { data: { user: null, session: null }, error: new Error('Supabase is not configured') }
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: `${window.location.origin}/` },
   })
 }
 
