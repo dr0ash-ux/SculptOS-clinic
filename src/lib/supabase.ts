@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://omydecuentoysmuptstu.supabase.co'
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_8HjvXkY9UAj58qCnCoVn8w_akeC4pfr'
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_8HjvXK9UAj58qCnCoVn8w_akeC4pfr'
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
@@ -12,11 +12,11 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   },
 })
 
-// Use the deployed SculptOS Clinic URL for production OAuth redirects.
+// Production URL is the Vercel domain actually attached to this project.
 // Keep localhost for local development only.
 const appOrigin = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? window.location.origin
-  : 'https://sculptosclinic.vercel.app'
+  : 'https://sculptosclinic-docashwarya-2120s-projects.vercel.app'
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
