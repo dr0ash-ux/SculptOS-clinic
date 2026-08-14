@@ -12,20 +12,10 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   },
 })
 
-// Supabase's PKCE flow returns ?code=... to the application. Explicitly
-// exchange it before the app checks the session, then remove the code from
-// the address bar so refreshes cannot try to consume it again.
-if (typeof window !== 'undefined') {
-  const url = new URL(window.location.href)
-  const code = url.searchParams.get('code')
-  if (code) {
-    void supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (error) console.error('Google OAuth session exchange failed:', error.message)
-      url.searchParams.delete('code')
-      window.history.replaceState({}, document.title, url.toString())
-    })
-  }
-}
+// Supabase's PKCE flow automatically detects ?code=... when
+// detectSessionInUrl is enabled and exchanges it for the session.
+// Do not manually exchange the code here: doing so can race Supabase's
+// own callback handling and consume the one-time authorization code twice.
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
