@@ -12,16 +12,17 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   },
 })
 
-// Supabase's PKCE flow automatically detects ?code=... when
-// detectSessionInUrl is enabled and exchanges it for the session.
-// Do not manually exchange the code here: doing so can race Supabase's
-// own callback handling and consume the one-time authorization code twice.
+// Use the deployed SculptOS Clinic URL for production OAuth redirects.
+// Keep localhost for local development only.
+const appOrigin = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? window.location.origin
+  : 'https://sculptosclinic.vercel.app'
 
 export async function signInWithGoogle() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/`,
+      redirectTo: `${appOrigin}/`,
       queryParams: { prompt: 'select_account' },
     },
   })
@@ -35,7 +36,7 @@ export async function signUpWithEmail(email: string, password: string) {
   return supabase.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${window.location.origin}/` },
+    options: { emailRedirectTo: `${appOrigin}/` },
   })
 }
 
