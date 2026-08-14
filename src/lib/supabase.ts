@@ -3,12 +3,17 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://omydecuentoysmuptstu.supabase.co'
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_8HjvXK9UAj58qCnCoVn8w_akeC4pfr'
 
+// This is a browser-only Vite SPA. Use Supabase's implicit OAuth flow here
+// so the Google callback does not depend on a PKCE code verifier surviving
+// the redirect. PKCE is appropriate when the verifier can be reliably
+// persisted across the entire callback flow; for this client-only app it was
+// causing the recurring /token?grant_type=pkce 401 seen in production.
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: 'pkce',
+    flowType: 'implicit',
   },
 })
 
