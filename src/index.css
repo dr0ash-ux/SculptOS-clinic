@@ -142,3 +142,21 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .clinical-section select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(62,199,176,.12)}
 .clinical-section .clinical-suggestion-field>select{background:#eaf6fc;border-color:#c8dfec}
 .clinical-section .custom-suggestion-entry input{background:#f4f8f8}
+
+
+/* More readable application typography */
+:root{font-size:17px}
+.app input,.app select,.app textarea{font-size:12px}
+.app .booking-form input,.app .booking-form select,.app .booking-form textarea,
+.app .form-modal input,.app .form-modal select,.app .form-modal textarea,
+.app .clinical-section input,.app .clinical-section select,.app .clinical-section textarea{font-size:12px}
+.app .booking-form label,.app .form-modal label,.app .appointment-modal label,.app .settings-form label,.app .clinical-section label{font-size:11px}
+.app .nav-item{font-size:14px}
+.app .clinic-switch{font-size:13px}
+.app .field-help,.app .clinical-section p,.app .booking-footer p{font-size:11px}
+
+/* Compact medical screening */
+#medical-screening .form-grid{gap:10px}
+#medical-screening .form-grid.two>label:has(textarea){grid-template-rows:18px 66px}
+#medical-screening .form-grid.two>label:has(textarea)>textarea{min-height:66px;max-height:96px;padding:8px 10px}
+#medical-screening .form-grid.two>label>input{height:40px}
