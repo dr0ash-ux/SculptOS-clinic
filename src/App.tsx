@@ -455,10 +455,33 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
   const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '', next_follow_up_date: patient.next_follow_up_date || '', payer_group: patient.payer_group || 'Self-pay', missed_appointments: String(patient.missed_appointments || 0), reminder_count: String(patient.reminder_count || 0) })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
+  const [customSuggestion, setCustomSuggestion] = useState({ investigations_advised: '', clinical_findings: '' })
+  const [addingCustom, setAddingCustom] = useState({ investigations_advised: false, clinical_findings: false })
   const set = (key: string, value: string) => setValues(current => ({ ...current, [key]: value }))
   const addOption = (key: 'investigations_advised' | 'clinical_findings', choice: string) => { if (!choice) return; set(key, values[key] ? `${values[key]}; ${choice}` : choice) }
+  const addCustomSuggestion = (key: 'investigations_advised' | 'clinical_findings') => {
+    const choice = customSuggestion[key].trim()
+    if (!choice) return
+    addOption(key, choice)
+    setCustomSuggestion(current => ({ ...current, [key]: '' }))
+    setAddingCustom(current => ({ ...current, [key]: false }))
+  }
   const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   const field = (key: keyof typeof values, label: string, area = false, placeholder = '') => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />}</label>
+  const suggestionField = (key: 'investigations_advised' | 'clinical_findings', label: string, options: string[], customLabel: string, placeholder: string) => <label className="clinical-suggestion-field">
+    <span>{label}</span>
+    <select value="" onChange={event => {
+      const choice = event.target.value
+      if (choice === '__custom__') setAddingCustom(current => ({ ...current, [key]: true }))
+      else addOption(key, choice)
+    }}>
+      <option value="">Select from the list</option>
+      {options.map(option => <option key={option} value={option}>{option}</option>)}
+      <option value="__custom__">{customLabel}</option>
+    </select>
+    {addingCustom[key] && <div className="custom-suggestion-entry"><input autoFocus value={customSuggestion[key]} onChange={event => setCustomSuggestion(current => ({ ...current, [key]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCustomSuggestion(key) } }} placeholder="Type here" /><button type="button" onClick={() => addCustomSuggestion(key)}>Add</button></div>}
+    <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />
+  </label>
   const followUp = values.next_follow_up_date ? new Date(`${values.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'
   const risks = [values.allergies && 'Allergies recorded', values.illness_history && 'Medical history recorded', values.current_medications && 'Medication review needed'].filter(Boolean) as string[]
 
@@ -532,15 +555,9 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <div><span className="section-number">03</span><div><h3>Assessment</h3><p>Document your examination, imaging requests and working diagnosis.</p></div></div>
           <FileText size={19} />
         </div>
-        <div className="form-grid">
-          <label>Investigations advised
-            <div className="clinical-select"><select defaultValue="" onChange={event => { addOption('investigations_advised', event.target.value); event.currentTarget.value = '' }}><option value="">Choose a suggested investigation…</option>{investigationOptions.map(option => <option key={option}>{option}</option>)}</select></div>
-            <textarea value={values.investigations_advised} onChange={event => set('investigations_advised', event.target.value)} placeholder="Selected investigations appear here. Add any specific views or requests." />
-          </label>
-          <label>Clinical findings
-            <div className="clinical-select"><select defaultValue="" onChange={event => { addOption('clinical_findings', event.target.value); event.currentTarget.value = '' }}><option value="">Choose a suggested finding…</option>{dentalFindings.map(option => <option key={option}>{option}</option>)}</select></div>
-            <textarea value={values.clinical_findings} onChange={event => set('clinical_findings', event.target.value)} placeholder="Selected findings appear here. Add detailed examination notes." />
-          </label>
+        <div className="form-grid two clinical-assessment-grid">
+          {suggestionField('investigations_advised', 'Investigations advised', investigationOptions, 'Add an investigation…', 'Selected investigations and notes')}
+          {suggestionField('clinical_findings', 'Clinical findings', dentalFindings, 'Add a finding…', 'Selected findings and examination notes')}
           {field('primary_diagnosis', 'Primary diagnosis', true, 'Working diagnosis at this visit')}
           {field('final_diagnosis', 'Final diagnosis', true, 'Update once all investigations are reviewed')}
         </div>
