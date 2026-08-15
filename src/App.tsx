@@ -237,6 +237,7 @@ export default function App() {
       patient_number: patientNumber,
       status: 'active',
       date_of_birth: values.date_of_birth || null,
+      patient_title: values.patient_title || null,
     }).select().single()
     if (error) {
       setNotice(error.message)
@@ -258,7 +259,7 @@ export default function App() {
     const patientNumber = `SC-${String(Date.now()).slice(-6)}`
     const { data: patientData, error: patientError } = await supabase.from('patients').insert({
       ...values, organization_id: workspace.organizationId, clinic_id: workspace.clinicId, created_by: user?.id,
-      patient_number: patientNumber, status: 'active', date_of_birth: values.date_of_birth || null,
+      patient_number: patientNumber, status: 'active', date_of_birth: values.date_of_birth || null, patient_title: values.patient_title || null,
     }).select().single()
     if (patientError || !patientData) { setNotice(patientError?.message || 'Could not create patient record.'); return }
     const patient = patientData as Patient
