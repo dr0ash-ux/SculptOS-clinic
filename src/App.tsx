@@ -334,7 +334,7 @@ export default function App() {
     <main>
       <header className="topbar">
         <button className="icon-btn" aria-label="Toggle navigation" onClick={() => setSidebar(value => !value)}><Menu size={19} /></button>
-        <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\\.\\s*/, 'Dr. ')}` : view === 'booking' ? 'Book appointment' : view === 'patient_file' ? 'Clinical file' : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+        <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\.\s*/, 'Dr. ')}` : view === 'booking' ? 'Book appointment' : view === 'patient_file' ? 'Clinical file' : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
         <div className="top-actions"><BranchSelector active={workspace.clinicId} branches={branches} onSelect={switchBranch} /><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
       </header>
       {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
