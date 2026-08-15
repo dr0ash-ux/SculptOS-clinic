@@ -4,7 +4,7 @@ import {
   LayoutDashboard, LogOut, Menu, Moon, Package, Plus, Search, Settings,
   Sun, UserRound, Users, WalletCards, X,
 } from 'lucide-react'
-import { signInWithGoogle, signOut, supabase } from './lib/supabase'
+import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/supabase'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -60,12 +60,16 @@ function patientName(patient?: Patient) {
 function formatShortDate(value: Date) {
   return value.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
+function greeting() {
+  const hour = new Date().getHours()
+  return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+}
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 export default function App() {
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(false)
   const [view, setView] = useState<View>('dashboard')
   const [sidebar, setSidebar] = useState(true)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
@@ -269,17 +273,15 @@ export default function App() {
 
 function Login({ dark, setDark, notice }: { dark: boolean; setDark: (value: boolean) => void; notice: string }) {
   const [working, setWorking] = useState(false)
-  const google = async () => {
-    setWorking(true)
-    const { error } = await signInWithGoogle()
-    if (error) setWorking(false)
-  }
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const google = async () => { setWorking(true); const { error } = await signInWithGoogle(); if (error) setWorking(false) }
+  const passwordLogin = async (event: FormEvent) => { event.preventDefault(); setWorking(true); const { error } = await signInWithPassword(email, password); if (error) { setWorking(false); return } }
   return <div className={dark ? 'login dark' : 'login'}>
-    <section className="login-visual"><div className="visual-overlay"><span className="eyebrow">SCULPTOS CLINIC</span><h1>Run the clinic.<br /><em>Keep the human.</em></h1><p>Appointments, patient journeys and a calmer clinical day—kept together in one beautiful workspace.</p></div></section>
-    <section className="login-panel"><div className="login-head"><div className="brand"><div className="brand-mark">S</div><div><b>SculptOS</b><span>CLINIC</span></div></div><button className="icon-btn" onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button></div><div className="login-copy"><span>SECURE CLINIC WORKSPACE</span><h2>Welcome back.</h2><p>Sign in with the Google account approved for your clinic.</p>{notice && <p className="login-error">{notice}</p>}<button className="google" onClick={google} disabled={working}><span className="g">G</span>{working ? 'Connecting…' : 'Continue with Google'}</button><small>By continuing, you agree to the SculptOS terms and privacy policy.</small></div></section>
+    <section className="login-visual"><div className="visual-overlay"><span className="eyebrow">SCULPTOS CLINIC</span><h1>Your practice,<br /><em>made structured.</em></h1><p>Appointments, patient journeys and clinical context—kept organised in one secure workspace.</p></div></section>
+    <section className="login-panel"><div className="login-head"><div className="brand"><div className="brand-mark">S</div><div><b>SculptOS</b><span>CLINIC</span></div></div><button className="icon-btn" onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button></div><div className="login-copy"><span>SECURE CLINIC WORKSPACE</span><h2>Welcome back.</h2><p>Sign in to your clinic workspace.</p>{notice && <p className="login-error">{notice}</p>}<form className="email-login" onSubmit={passwordLogin}><label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="doctor@clinic.com" required /></label><label>Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Your password" required /></label><button className="primary" disabled={working}>{working ? 'Signing in…' : 'Sign in'}</button></form><div className="login-divider"><span>or continue with</span></div><button className="google" onClick={google} disabled={working}><span className="g">G</span>Continue with Google</button><small>By continuing, you agree to the SculptOS terms and privacy policy.</small></div></section>
   </div>
 }
-
 function Hero({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
   return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
 }
