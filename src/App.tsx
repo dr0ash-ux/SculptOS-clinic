@@ -305,8 +305,9 @@ function Scheduler({ weekDays, setWeekStart, appointments, patients, onOpenPatie
             const [hours, minutes] = time.split(':').map(Number)
             slot.setHours(hours, minutes, 0, 0)
             const cellAppointments = appointments.filter(item => item.scheduled_at.slice(0, 10) === dateKey(day) && Math.floor((new Date(item.scheduled_at).getHours() * 60 + new Date(item.scheduled_at).getMinutes() - 8 * 60) / 30) === index)
-            return <div className="hour empty-slot" key={time} role="button" tabIndex={0} aria-label={`Book an appointment for ${day.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} at ${time}`} onClick={() => onOpenSlot({ date: slot, label: time })} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpenSlot({ date: slot, label: time }) } }}>
-              {cellAppointments.map(item => <button className={`appointment ${item.clinician_color}`} style={{ height: `calc(${item.duration_minutes / 30 * 56}px - 8px)` }} key={item.id} onClick={event => { event.stopPropagation(); onOpenPatient(item.patient_id) }}><b>{item.treatment_label}</b><span>{patientName(patients.find(patient => patient.id === item.patient_id))}</span><em>{item.clinician_name} · {formatTime(item.scheduled_at)}</em></button>)}
+            return <div className="hour" key={time}>
+              {cellAppointments.length === 0 && <button type="button" className="slot-button" aria-label={`Book an appointment for ${day.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })} at ${time}`} onClick={() => onOpenSlot({ date: slot, label: time })}><span>Book appointment</span></button>}
+              {cellAppointments.map(item => <button type="button" className={`appointment ${item.clinician_color}`} style={{ height: `calc(${item.duration_minutes / 30 * 56}px - 8px)` }} key={item.id} onClick={() => onOpenPatient(item.patient_id)}><b>{item.treatment_label}</b><span>{patientName(patients.find(patient => patient.id === item.patient_id))}</span><em>{item.clinician_name} · {formatTime(item.scheduled_at)}</em></button>)}
             </div>
           })}
         </div>)}
