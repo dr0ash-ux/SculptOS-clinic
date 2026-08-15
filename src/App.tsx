@@ -78,7 +78,7 @@ function formatTime(value: string) {
 
 export default function App() {
   const [view, setView] = useState<View>('dashboard')
-  const [sidebar, setSidebar] = useState(true)
+  const [sidebar, setSidebar] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [branches, setBranches] = useState<Branch[]>([])
   const [branchMetrics, setBranchMetrics] = useState<BranchMetric[]>([])
@@ -334,6 +334,7 @@ export default function App() {
     <main>
       <header className="topbar">
         <button className="icon-btn" aria-label="Toggle navigation" onClick={() => setSidebar(value => !value)}><Menu size={19} /></button>
+        <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\\.\\s*/, 'Dr. ')}` : view === 'booking' ? 'Book appointment' : view === 'patient_file' ? 'Clinical file' : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
         <div className="top-actions"><BranchSelector active={workspace.clinicId} branches={branches} onSelect={switchBranch} /><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
       </header>
       {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
@@ -364,8 +365,8 @@ function Login({ notice }: { notice: string }) {
     <section className="login-panel"><div className="login-head"><div className="brand"><div className="brand-mark">S</div><div><b>SculptOS</b><span>CLINIC</span></div></div></div><div className="login-copy"><span>SECURE CLINIC WORKSPACE</span><h2>Welcome back.</h2><p>Sign in to your clinic workspace.</p>{notice && <p className="login-error">{notice}</p>}<form className="email-login" onSubmit={passwordLogin}><label>Email<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="doctor@clinic.com" required /></label><label>Password<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Your password" required /></label><button className="primary" disabled={working}>{working ? 'Signing in…' : 'Sign in'}</button></form><div className="login-divider"><span>or continue with</span></div><button className="google" onClick={google} disabled={working}><span className="g">G</span>Continue with Google</button><small>By continuing, you agree to the SculptOS terms and privacy policy.</small></div></section>
   </div>
 }
-function Hero({ eyebrow, title, copy, action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
-  return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
+function Hero({ action }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode }) {
+  return action ? <div className="page-action-row">{action}</div> : null
 }
 
 function BranchSelector({ active, branches, onSelect }: { active: string; branches: Branch[]; onSelect: (branch: Branch) => void }) {
@@ -453,7 +454,7 @@ function PatientsPage({ patients, onOpenFile, onNew }: { patients: Patient[]; on
 }
 
 function PatientFilePage({ patient, onBack, onSave, onBook }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
-  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<button className="ghost" onClick={onBack}>Back to patients</button>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} /></section>
+  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} /></section>
 }
 
 function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
@@ -663,7 +664,7 @@ function BookingPage({ slot, schedule, appointments, onCancel, onSave }: { slot:
   const set = (key: keyof typeof emptyPatient, value: string) => setValues(current => ({ ...current, [key]: value }))
   const field = (key: keyof typeof emptyPatient, label: string, area = false) => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} />}</label>
   const submit = async (event: FormEvent) => { event.preventDefault(); if (!values.first_name.trim()) return; setSaving(true); await onSave(values, doctor, Number(duration), treatment, notes); setSaving(false) }
-  return <section className="booking-page"><Hero eyebrow="NEW APPOINTMENT" title="Book appointment" copy="Create the patient record and confirm the visit in one workflow." action={<button className="ghost" onClick={onCancel}>Cancel</button>} /><form className="panel booking-form" onSubmit={submit}>
+  return <section className="booking-page"><Hero eyebrow="NEW APPOINTMENT" title="Book appointment" copy="Create the patient record and confirm the visit in one workflow." action={<button className="ghost" onClick={onCancel}><ChevronLeft size={16} /> Back to appointments</button>} /><form className="panel booking-form" onSubmit={submit}>
     <div className="booking-slot"><CalendarDays size={17} /><div><span>Selected appointment time</span><b>{slot.date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {slot.label || formatTime(slot.date.toISOString())}</b></div></div>
     <div className="booking-section"><div className="section-heading"><span>01</span><div><h3>Patient details</h3><p>Enter the details recorded at reception.</p></div></div><div className="form-grid two"><div className="patient-name-entry"><label>Title<select value={values.patient_title} onChange={event => set('patient_title', event.target.value)}><option value="">Select</option><option value="Mr.">Mr.</option><option value="Ms.">Ms.</option><option value="Mrs.">Mrs.</option><option value="Dr.">Dr.</option></select></label>{field('first_name', 'Patient name *')}</div><label>Patient ID<input value="Generated automatically" disabled /></label><label>Date of birth<DobPicker value={values.date_of_birth} onChange={value => set('date_of_birth', value)} /></label><label>Age<input value={ageFromDob(values.date_of_birth)} placeholder="Auto-filled from DOB" readOnly /></label><label>Sex<select value={values.sex} onChange={event => set('sex', event.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>{field('phone', 'Phone number')}{field('location', 'Address')}{field('occupation', 'Occupation')}{field('email', 'Email ID')}</div><div className="form-grid"><SmartTextArea field="chief_complaint" label="Chief complaint" value={values.chief_complaint} onChange={value => set('chief_complaint', value)} /></div></div>
     <div className="booking-section"><div className="section-heading"><span>02</span><div><h3>Appointment details</h3><p>Assign the clinician and define the visit.</p></div></div><div className="form-grid two"><label>Assigned doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name}>{item.name}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label></div><label>Visit type<input value={treatment} onChange={event => setTreatment(event.target.value)} /></label><label>Reception note<textarea value={notes} onChange={event => setNotes(event.target.value)} /></label></div>
