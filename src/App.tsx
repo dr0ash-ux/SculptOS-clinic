@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/supabase'
 
-type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports'
+type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
 type Branch = { id: string; organization_id: string; name: string; timezone: string }
 type BranchMetric = { id: string; name: string; patientCount: number; appointmentCount: number }
@@ -356,9 +356,10 @@ export default function App() {
         {view === 'appointments' && <section className="appointments-page"><Hero showHeader eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
         {view === 'booking' && appointmentSlot && <BookingPage slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} onOpenFile={patientId => { setSelectedPatientId(patientId); setView('patient_file') }} onNew={() => setPatientModalOpen(true)} />}
-        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} onOpenCbctUpload={() => setView('cbct_upload')} />}
-        {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_file')} />}
-        {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_file')} />}
+        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImagingPage={() => setView('patient_imaging')} />}
+        {view === 'patient_imaging' && selectedPatient && <PatientImagingPage patient={selectedPatient} onBack={() => setView('patient_file')} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} onOpenCbctUpload={() => setView('cbct_upload')} />}
+        {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_imaging')} />}
+        {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
         {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports'].includes(view) && <PlaceholderPage view={view} />}
@@ -469,8 +470,12 @@ function PatientsPage({ patients, onOpenFile, onNew }: { patients: Patient[]; on
   return <section><Hero showHeader eyebrow="PATIENTS" title="Patient management" copy="A branch-wide registry for follow-ups, reminders and clinical records." action={<button className="primary" onClick={onNew}><Plus size={16} /> New patient</button>} /><div className="panel patient-panel registry-panel"><div className="filter-row"><div><b>{patients.length} patients</b><span>Click a patient to open their full clinical file.</span></div><div className="registry-headings"><span>Follow-up</span><span>Scheme / group</span><span>Engagement</span></div></div>{patients.length ? patients.map(patient => <button className="patient-row registry-row" key={patient.id} onClick={() => onOpenFile(patient.id)}><div className="patient-name"><div className="avatar">{initials(patientName(patient))}</div><div><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone saved'}</span></div></div><div className="registry-item"><b>{patient.next_follow_up_date ? new Date(`${patient.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'}</b><span>{patient.missed_appointments} missed appointment{patient.missed_appointments === 1 ? '' : 's'}</span></div><div className="registry-item"><b>{patient.payer_group || 'Self-pay'}</b><span>{patient.primary_diagnosis || 'No diagnosis recorded'}</span></div><div className="registry-item"><b>{patient.reminder_count} reminder{patient.reminder_count === 1 ? '' : 's'}</b><span>Calls / bot attempts</span></div><ChevronRight size={16} /></button>) : <EmptyState label="No patient records yet. Add your first patient to begin the clinic workflow." />}</div></section>
 }
 
-function PatientFilePage({ patient, onBack, onSave, onBook, onOpenImaging, onOpenCbctUpload }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImaging: (asset: ImagingAsset) => void; onOpenCbctUpload: () => void }) {
-  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} onOpenImaging={onOpenImaging} onOpenCbctUpload={onOpenCbctUpload} /></section>
+function PatientFilePage({ patient, onBack, onSave, onBook, onOpenImagingPage }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImagingPage: () => void }) {
+  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<div className="file-page-actions"><button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button><button className="primary" onClick={onOpenImagingPage}>Open imaging</button></div>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} /></section>
+}
+
+function PatientImagingPage({ patient, onBack, onOpenImaging, onOpenCbctUpload }: { patient: Patient; onBack: () => void; onOpenImaging: (asset: ImagingAsset) => void; onOpenCbctUpload: () => void }) {
+  return <section className="patient-imaging-page"><Hero eyebrow="PATIENT IMAGING" title={patientName(patient)} copy={`${patient.patient_number} · All radiographs, scans and patient images`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to clinical file</button>} /><ImagingLibrary patient={patient} onOpenImaging={onOpenImaging} onOpenCbctUpload={onOpenCbctUpload} /></section>
 }
 
 function CBCTUploadPage({ patient, onBack }: { patient: Patient; onBack: () => void }) {
@@ -638,6 +643,7 @@ function ImagingLibrary({ patient, onOpenImaging, onOpenCbctUpload }: { patient:
   const [assetType, setAssetType] = useState<ImagingAsset['asset_type']>('opg')
   const [note, setNote] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const types: { id: ImagingAsset['asset_type']; title: string; detail: string }[] = [
@@ -658,50 +664,49 @@ function ImagingLibrary({ patient, onOpenImaging, onOpenCbctUpload }: { patient:
 
   const uploadFile = async (file?: File) => {
     if (!file || uploading) return
-    if (file.size > 25 * 1024 * 1024) { setMessage('Please upload a file smaller than 25 MB. Larger CBCT studies will be connected through the DICOM viewer workflow.'); return }
+    if (file.size > 25 * 1024 * 1024) { setMessage('Please upload a file smaller than 25 MB. Use the dedicated CBCT uploader for DICOM series.'); return }
     setUploading(true); setMessage('')
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-')
     const storagePath = `${patient.clinic_id}/${patient.id}/${Date.now()}-${safeName}`
     const { error: storageError } = await supabase.storage.from('patient-imaging').upload(storagePath, file, { contentType: file.type || undefined, upsert: false })
     if (storageError) { setUploading(false); setMessage(storageError.message); return }
-    const { error: recordError } = await supabase.from('patient_imaging').insert({
-      organization_id: patient.organization_id, clinic_id: patient.clinic_id, patient_id: patient.id,
-      asset_type: assetType, file_name: file.name, storage_path: storagePath,
-      mime_type: file.type || null, file_size_bytes: file.size, notes: note.trim() || null,
-    })
-    if (recordError) {
-      await supabase.storage.from('patient-imaging').remove([storagePath])
-      setUploading(false); setMessage(recordError.message); return
-    }
-    setNote(''); setUploading(false); setMessage(`${types.find(type => type.id === assetType)?.title} added to this clinical file.`)
-    await loadAssets()
+    const { error: recordError } = await supabase.from('patient_imaging').insert({ organization_id: patient.organization_id, clinic_id: patient.clinic_id, patient_id: patient.id, asset_type: assetType, file_name: file.name, storage_path: storagePath, mime_type: file.type || null, file_size_bytes: file.size, notes: note.trim() || null })
+    if (recordError) { await supabase.storage.from('patient-imaging').remove([storagePath]); setUploading(false); setMessage(recordError.message); return }
+    setNote(''); setUploading(false); setMessage(`${types.find(type => type.id === assetType)?.title} added to this imaging file.`); await loadAssets()
   }
-
-  const openPreview = (asset: ImagingAsset) => onOpenImaging(asset)
-
+  const deleteAssets = async (target: ImagingAsset[], label: string) => {
+    if (!target.length || deleting) return
+    if (!window.confirm(`Delete ${label}? This permanently removes the uploaded file${target.length === 1 ? '' : 's'} from this patient record.`)) return
+    setDeleting(target[0].id); setMessage('')
+    const { error: storageError } = await supabase.storage.from('patient-imaging').remove(target.map(asset => asset.storage_path))
+    if (storageError) { setDeleting(null); setMessage(storageError.message); return }
+    const { error: recordError } = await supabase.from('patient_imaging').delete().in('id', target.map(asset => asset.id))
+    if (recordError) { setDeleting(null); setMessage(`Files were removed from storage, but the record could not be removed: ${recordError.message}`); return }
+    setDeleting(null); setMessage(`${label} deleted.`); await loadAssets()
+  }
   const labelFor = (type: ImagingAsset['asset_type']) => types.find(item => item.id === type)?.title || 'Imaging'
+  const cbctGroups = new Map<string, ImagingAsset[]>()
+  const individualAssets = assets.filter(asset => {
+    if (asset.asset_type !== 'cbct') return true
+    const key = asset.study_group_id || asset.id
+    const group = cbctGroups.get(key) || []; group.push(asset); cbctGroups.set(key, group)
+    return false
+  })
+  const rows = [
+    ...Array.from(cbctGroups.entries()).map(([key, group]) => ({ key: `study-${key}`, kind: 'study' as const, asset: group[0], assets: group })),
+    ...individualAssets.map(asset => ({ key: asset.id, kind: 'file' as const, asset, assets: [asset] })),
+  ].sort((a, b) => new Date(b.asset.created_at).getTime() - new Date(a.asset.created_at).getTime())
 
   return <div className="imaging-library">
-    <div className="imaging-type-grid">
-      {types.map(type => <button key={type.id} type="button" className={assetType === type.id ? 'imaging-type active' : 'imaging-type'} onClick={() => { if (type.id === 'cbct') { onOpenCbctUpload(); return } setAssetType(type.id); setMessage('') }}>
-        <strong>{type.title}</strong><span>{type.detail}</span>
-      </button>)}
-    </div>
-    <div className="imaging-upload-row">
-      <div><strong>Add {labelFor(assetType)}</strong><span>JPG, PNG, TIFF, PDF, DICOM or STL · up to 25 MB</span></div>
-      <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? 'Uploading…' : 'Upload file'}</button>
-      <input ref={fileInputRef} type="file" className="visually-hidden" accept="image/jpeg,image/png,image/tiff,application/pdf,.tif,.tiff,.dcm,.dicom,.stl" onChange={event => { void uploadFile(event.target.files?.[0]); event.target.value = '' }} />
-    </div>
+    <div className="imaging-type-grid">{types.map(type => <button key={type.id} type="button" className={assetType === type.id ? 'imaging-type active' : 'imaging-type'} onClick={() => { if (type.id === 'cbct') { onOpenCbctUpload(); return } setAssetType(type.id); setMessage('') }}><strong>{type.title}</strong><span>{type.detail}</span></button>)}</div>
+    <div className="imaging-upload-row"><div><strong>Add {labelFor(assetType)}</strong><span>JPG, PNG, TIFF, PDF or STL · up to 25 MB</span></div><button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? 'Uploading…' : 'Upload file'}</button><input ref={fileInputRef} type="file" className="visually-hidden" accept="image/jpeg,image/png,image/tiff,application/pdf,.tif,.tiff,.stl" onChange={event => { void uploadFile(event.target.files?.[0]); event.target.value = '' }} /></div>
     <label className="imaging-note"><span className="field-label">Image note <em>optional</em></span><input value={note} onChange={event => setNote(event.target.value)} placeholder="e.g. Pre-operative OPG from external radiology centre" /></label>
     {message && <p className="imaging-message">{message}</p>}
-    <div className="imaging-history">
-      <div className="imaging-history-head"><strong>Imaging timeline</strong><span>{assets.length ? `${assets.length} file${assets.length === 1 ? '' : 's'} registered` : 'No imaging uploaded yet'}</span></div>
-      {assets.length > 0 && <div className="imaging-list">{assets.map(asset => <button type="button" className="imaging-item" key={asset.id} onClick={() => void openPreview(asset)}><span className="imaging-badge">{labelFor(asset.asset_type)}</span><span><strong>{asset.file_name}</strong><small>{new Date(asset.captured_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{asset.notes ? ` · ${asset.notes}` : ''}</small></span><ChevronRight size={16} /></button>)}</div>}
-    </div>
+    <div className="imaging-history"><div className="imaging-history-head"><strong>Imaging library</strong><span>{rows.length ? `${rows.length} item${rows.length === 1 ? '' : 's'} registered` : 'No imaging uploaded yet'}</span></div>{rows.length > 0 && <div className="imaging-list">{rows.map(row => <div className={row.kind === 'study' ? 'imaging-item cbct-study-item' : 'imaging-item'} key={row.key}><span className="imaging-badge">{row.kind === 'study' ? 'CBCT study' : labelFor(row.asset.asset_type)}</span><button type="button" className="imaging-row-open" onClick={() => { if (row.kind === 'file') onOpenImaging(row.asset) }} disabled={row.kind === 'study'}><span><strong>{row.kind === 'study' ? (row.asset.notes || 'CBCT study') : row.asset.file_name}</strong><small>{row.kind === 'study' ? `${row.assets.length} files uploaded · DICOM viewer coming next` : `${new Date(row.asset.captured_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${row.asset.notes ? ` · ${row.asset.notes}` : ''}`}</small></span>{row.kind === 'file' && <ChevronRight size={16} />}</button><button type="button" className="imaging-delete" disabled={deleting === row.assets[0].id} onClick={() => void deleteAssets(row.assets, row.kind === 'study' ? 'this CBCT study' : `"${row.asset.file_name}"`)}>{deleting === row.assets[0].id ? 'Deleting…' : 'Delete'}</button></div>)}</div>}</div>
   </div>
 }
 
-function ClinicalFile({ patient, onSave, onBook, onOpenImaging, onOpenCbctUpload }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImaging: (asset: ImagingAsset) => void; onOpenCbctUpload: () => void }) {
+function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
   const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '', next_follow_up_date: patient.next_follow_up_date || '', payer_group: patient.payer_group || 'Self-pay', missed_appointments: String(patient.missed_appointments || 0), reminder_count: String(patient.reminder_count || 0) })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
@@ -758,8 +763,7 @@ function ClinicalFile({ patient, onSave, onBook, onOpenImaging, onOpenCbctUpload
         <button type="button" onClick={() => jumpTo('medical-screening')}><span>01</span>Medical screening<ChevronRight size={15} /></button>
         <button type="button" onClick={() => jumpTo('presenting-problem')}><span>02</span>Complaint & history<ChevronRight size={15} /></button>
         <button type="button" onClick={() => jumpTo('clinical-assessment')}><span>03</span>Assessment<ChevronRight size={15} /></button>
-        <button type="button" onClick={() => jumpTo('clinical-imaging')}><span>04</span>Imaging & uploads<ChevronRight size={15} /></button>
-        <button type="button" onClick={() => jumpTo('care-coordination')}><span>05</span>Follow-up<ChevronRight size={15} /></button>
+        <button type="button" onClick={() => jumpTo('care-coordination')}><span>04</span>Follow-up<ChevronRight size={15} /></button>
       </nav>
     </aside>
 
@@ -771,7 +775,7 @@ function ClinicalFile({ patient, onSave, onBook, onOpenImaging, onOpenCbctUpload
           <p>Capture the essential history, examination and plan in the order of a real consultation.</p>
         </div>
         <div className="clinical-progress" aria-label="Clinical file workflow">
-          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><button type="button" onClick={() => jumpTo('clinical-imaging')}>Imaging</button><button type="button" onClick={() => jumpTo('care-coordination')}>Plan</button>
+          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><button type="button" onClick={() => jumpTo('care-coordination')}>Plan</button>
         </div>
       </div>
 
@@ -814,17 +818,9 @@ function ClinicalFile({ patient, onSave, onBook, onOpenImaging, onOpenCbctUpload
         </div>
       </section>
 
-      <section className="clinical-section" id="clinical-imaging">
-        <div className="clinical-section-head">
-          <div><span className="section-number">04</span><div><h3>Imaging & uploads</h3><p>Register OPGs and other patient records securely in one clinical imaging library.</p></div></div>
-          <FileText size={19} />
-        </div>
-        <ImagingLibrary patient={patient} onOpenImaging={onOpenImaging} onOpenCbctUpload={onOpenCbctUpload} />
-      </section>
-
       <section className="clinical-section" id="care-coordination">
         <div className="clinical-section-head">
-          <div><span className="section-number">05</span><div><h3>Follow-up & engagement</h3><p>Keep the care plan and reception follow-through visible.</p></div></div>
+          <div><span className="section-number">04</span><div><h3>Follow-up & engagement</h3><p>Keep the care plan and reception follow-through visible.</p></div></div>
           <CalendarDays size={19} />
         </div>
         <div className="form-grid two">
