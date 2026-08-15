@@ -131,3 +131,14 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .patient-name-entry label{min-width:0}
 .patient-name-entry select,.patient-name-entry input{width:100%}
 @media(max-width:650px){.patient-name-entry,.booking-form .patient-name-entry{grid-column:span 1;grid-template-columns:1fr}.patient-name-entry{gap:10px}}
+
+
+/* Clinical file input treatment matches appointment booking */
+.clinical-section input,
+.clinical-section textarea,
+.clinical-section select{background:var(--surface2);border-color:var(--line);transition:border-color .18s,box-shadow .18s}
+.clinical-section input:focus,
+.clinical-section textarea:focus,
+.clinical-section select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(62,199,176,.12)}
+.clinical-section .clinical-suggestion-field>select{background:#eaf6fc;border-color:#c8dfec}
+.clinical-section .custom-suggestion-entry input{background:#f4f8f8}
