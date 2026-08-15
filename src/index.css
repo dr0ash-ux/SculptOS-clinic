@@ -160,3 +160,11 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 #medical-screening .form-grid.two>label:has(textarea){grid-template-rows:18px 66px}
 #medical-screening .form-grid.two>label:has(textarea)>textarea{min-height:66px;max-height:96px;padding:8px 10px}
 #medical-screening .form-grid.two>label>input{height:40px}
+
+
+/* One clear page heading; appointment grid prioritises working hours */
+.topbar{height:66px}
+.appointments-page .hero-row{margin-bottom:18px}
+.page:has(.appointments-page){padding-top:28px;padding-bottom:18px}
+.appointments-page .calendar-scroll{height:calc(100vh - 320px);min-height:420px}
+@media(max-width:850px){.appointments-page .calendar-scroll{height:calc(100vh - 285px);min-height:390px}}
