@@ -559,7 +559,7 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
           </div>
           <div className="opg-reader-stage" onMouseMove={updateLens} onMouseLeave={() => setLens(value => ({ ...value, visible: false }))}>
             <img ref={imageElementRef} src={url} alt={asset.file_name} style={{ filter: imageFilter, transform: `scale(${zoom})` }} />
-            {lens.visible && <div className="opg-magnifier" aria-hidden="true" style={{ left: lens.left, top: lens.top, backgroundImage: `url("${url}")`, backgroundPosition: `${82 - lens.x * lens.width * 3.5}px ${82 - lens.y * lens.height * 3.5}px`, backgroundSize: `${lens.width * 3.5}px ${lens.height * 3.5}px`, filter: imageFilter }} />}
+            {lens.visible && <div className="opg-magnifier" aria-hidden="true" style={{ left: lens.left, top: lens.top, backgroundImage: `url("${url}")`, backgroundPosition: `${82 - lens.x * lens.width * 2.5}px ${82 - lens.y * lens.height * 2.5}px`, backgroundSize: `${lens.width * 2.5}px ${lens.height * 2.5}px`, filter: imageFilter }} />}
             <span className="opg-lens-tip">Move over the OPG to inspect with the magnifier</span>
           </div>
           {analysisOpen && <section className="opg-analysis-panel">
