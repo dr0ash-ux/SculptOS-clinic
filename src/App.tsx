@@ -77,7 +77,7 @@ function formatTime(value: string) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>('dashboard')
+  const [view, setView] = useState<View>('appointments')
   const [sidebar, setSidebar] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [branches, setBranches] = useState<Branch[]>([])
@@ -290,7 +290,7 @@ export default function App() {
     if (user) localStorage.setItem(`sculptos-active-branch-${user.id}`, branch.id)
     await loadRecords(next)
     setSelectedPatientId(null)
-    setView('dashboard')
+    setView('appointments')
     setNotice(`Now viewing ${branch.name}.`)
   }
   const createBranch = async (name: string) => {
