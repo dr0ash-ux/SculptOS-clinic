@@ -475,7 +475,29 @@ function PatientFilePage({ patient, onBack, onSave, onBook, onOpenImaging }: { p
 function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset: ImagingAsset; onBack: () => void }) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
+  const [zoom, setZoom] = useState(1)
+  const [brightness, setBrightness] = useState(100)
+  const [contrast, setContrast] = useState(100)
+  const [invert, setInvert] = useState(false)
+  const [lens, setLens] = useState({ visible: false, x: 50, y: 50 })
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [reviewed, setReviewed] = useState<Record<string, boolean>>({})
   const previewable = asset.mime_type?.startsWith('image/') || asset.mime_type === 'application/pdf'
+  const isOpg = asset.asset_type === 'opg' && !!asset.mime_type?.startsWith('image/')
+  const imageFilter = `brightness(${brightness}%) contrast(${contrast}%)${invert ? ' invert(1)' : ''}`
+  const reviewItems = [
+    ['quality', 'Image quality', 'Positioning, exposure, artefacts and coverage'],
+    ['dentition', 'Dentition & development', 'Missing, supernumerary, retained and unerupted teeth'],
+    ['impaction', 'Impactions', 'Angulation, relation to adjacent teeth and likely path of eruption'],
+    ['caries', 'Caries screening', 'Possible gross lesions only; confirm with clinical exam / bitewings'],
+    ['periodontium', 'Periodontium', 'Generalised or localised crestal bone changes'],
+    ['periapical', 'Periapical region', 'Radiolucencies, endodontically treated teeth and retained roots'],
+    ['anatomy', 'Anatomy & pathology', 'Sinus, condyles, canal and incidental findings'],
+  ] as const
+  const updateLens = (event: any) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    setLens({ visible: true, x: Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)) })
+  }
 
   useEffect(() => {
     let active = true
@@ -489,9 +511,9 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
     return () => { active = false }
   }, [asset.storage_path])
 
-  return <section className="imaging-viewer-page">
-    <Hero eyebrow="PATIENT IMAGING" title={asset.asset_type === 'opg' ? 'OPG viewer' : 'Imaging viewer'} copy={`${patientName(patient)} · ${asset.file_name}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to clinical file</button>} />
-    <div className="imaging-viewer-layout">
+  return <section className={isOpg ? 'imaging-viewer-page opg-reader-page' : 'imaging-viewer-page'}>
+    <Hero eyebrow="PATIENT IMAGING" title={asset.asset_type === 'opg' ? 'OPG reader' : 'Imaging viewer'} copy={`${patientName(patient)} · ${asset.file_name}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to clinical file</button>} />
+    <div className={isOpg ? 'imaging-viewer-layout opg-reader-layout' : 'imaging-viewer-layout'}>
       <aside className="imaging-viewer-details">
         <span className="eyebrow">REGISTERED FILE</span>
         <h3>{asset.file_name}</h3>
@@ -503,10 +525,35 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
         </dl>
         {url && <a className="ghost viewer-download" href={url} target="_blank" rel="noreferrer">Open in new tab</a>}
       </aside>
-      <div className="imaging-viewer-canvas">
+      <div className={isOpg ? 'imaging-viewer-canvas opg-reader-canvas' : 'imaging-viewer-canvas'}>
         {!url && !error && <p>Opening secure image…</p>}
         {error && <p>{error}</p>}
-        {url && previewable && (asset.mime_type === 'application/pdf' ? <iframe title={asset.file_name} src={url} /> : <img src={url} alt={asset.file_name} />)}
+        {url && isOpg && <div className="opg-reader-workspace">
+          <div className="opg-reader-toolbar">
+            <div className="opg-tool-group">
+              <button type="button" onClick={() => setZoom(value => Math.max(1, +(value - .2).toFixed(1)))} aria-label="Zoom out">−</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button type="button" onClick={() => setZoom(value => Math.min(2.4, +(value + .2).toFixed(1)))} aria-label="Zoom in">+</button>
+            </div>
+            <label>Brightness <input type="range" min="65" max="145" value={brightness} onChange={event => setBrightness(Number(event.target.value))} /></label>
+            <label>Contrast <input type="range" min="65" max="165" value={contrast} onChange={event => setContrast(Number(event.target.value))} /></label>
+            <button type="button" className={invert ? 'opg-toggle active' : 'opg-toggle'} onClick={() => setInvert(value => !value)}>Invert</button>
+            <button type="button" className="opg-reset" onClick={() => { setZoom(1); setBrightness(100); setContrast(100); setInvert(false) }}>Reset</button>
+            <button type="button" className="primary opg-analyse" onClick={() => setAnalysisOpen(value => !value)}>{analysisOpen ? 'Hide analysis' : 'Analyse OPG'}</button>
+          </div>
+          <div className="opg-reader-stage" onMouseMove={updateLens} onMouseLeave={() => setLens(value => ({ ...value, visible: false }))}>
+            <img src={url} alt={asset.file_name} style={{ filter: imageFilter, transform: `scale(${zoom})` }} />
+            {lens.visible && <div className="opg-magnifier" aria-hidden="true" style={{ left: `${lens.x}%`, top: `${lens.y}%`, backgroundImage: `url("${url}")`, backgroundPosition: `${lens.x}% ${lens.y}%`, backgroundSize: `${Math.round(zoom * 420)}%`, filter: imageFilter }} />}
+            <span className="opg-lens-tip">Move over the OPG to inspect with the magnifier</span>
+          </div>
+          {analysisOpen && <section className="opg-analysis-panel">
+            <div className="opg-analysis-head"><div><span className="eyebrow">CLINICIAN REVIEW</span><h3>OPG assessment checklist</h3></div><span className="opg-decision-support">Decision support only</span></div>
+            <p>This reader is ready for annotation and structured review. Automated findings will appear here only after our research model has been trained and validated.</p>
+            <div className="opg-review-list">{reviewItems.map(([key, title, detail]) => <button type="button" key={key} className={reviewed[key] ? 'opg-review-item reviewed' : 'opg-review-item'} onClick={() => setReviewed(current => ({ ...current, [key]: !current[key] }))}><span>{reviewed[key] ? 'Reviewed' : 'Review'}</span><div><strong>{title}</strong><small>{detail}</small></div><ChevronRight size={16} /></button>)}</div>
+            <div className="opg-safety-note">The clinician remains responsible for reviewing image quality, confirming every finding and correlating it with examination and appropriate adjunctive radiographs.</div>
+          </section>}
+        </div>}
+        {url && previewable && !isOpg && (asset.mime_type === 'application/pdf' ? <iframe title={asset.file_name} src={url} /> : <img src={url} alt={asset.file_name} />)}
         {url && !previewable && <div className="unsupported-imaging"><strong>Specialised viewer required</strong><span>This file is safely registered. DICOM and STL viewing will open here once their specialised viewer is connected.</span><a className="primary" href={url} target="_blank" rel="noreferrer">Download file</a></div>}
       </div>
     </div>
