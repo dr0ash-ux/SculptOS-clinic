@@ -614,3 +614,57 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
   .cbct-upload-footer { align-items: stretch; flex-direction: column; }
   .cbct-upload-footer .primary { width: 100%; }
 }
+
+
+/* Dedicated imaging-library layout */
+.patient-imaging-page { max-width: 1180px; }
+.patient-imaging-page > .imaging-library { padding: 24px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+.file-page-actions { display: flex; align-items: center; gap: 9px; }
+.file-page-actions .primary,.file-page-actions .ghost { white-space: nowrap; }
+
+.imaging-item { grid-template-columns: auto minmax(0,1fr) auto; padding: 0; }
+.imaging-row-open {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  padding: 12px 0;
+  text-align: left;
+  color: var(--text);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.imaging-row-open:disabled { cursor: default; }
+.imaging-row-open:not(:disabled):hover strong { color: var(--accent2); }
+.imaging-item > .imaging-badge { align-self: center; margin-left: 15px; }
+.imaging-delete {
+  align-self: center;
+  margin: 0 13px 0 10px;
+  padding: 6px 8px;
+  color: #a34c4c;
+  border: 1px solid #ebcfcf;
+  border-radius: 8px;
+  background: #fffafa;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+.imaging-delete:hover { color: #832f2f; border-color: #dca9a9; background: #fff2f2; }
+.imaging-delete:disabled { opacity: .65; cursor: wait; }
+.cbct-study-item { background: #fafcff; }
+.cbct-study-item .imaging-badge { color: #565292; background: #ecebff; }
+.cbct-study-item .imaging-row-open { cursor: default; }
+.cbct-study-item .imaging-row-open strong { text-transform: none; }
+
+@media (max-width: 760px) {
+  .patient-imaging-page > .imaging-library { padding: 16px; border-radius: 16px; }
+  .file-page-actions { width: 100%; }
+  .file-page-actions .primary,.file-page-actions .ghost { flex: 1; justify-content: center; }
+  .imaging-item { grid-template-columns: auto minmax(0,1fr); }
+  .imaging-row-open { grid-column: 2; }
+  .imaging-delete { grid-column: 2; justify-self: start; margin: 0 0 11px; }
+}
