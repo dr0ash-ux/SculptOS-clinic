@@ -431,3 +431,55 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
   .imaging-upload-row .primary { width: 100%; }
   .imaging-history-head { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* Dedicated patient imaging viewer */
+.imaging-viewer-page { min-height: calc(100vh - 86px); }
+.imaging-viewer-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: min(720px, calc(100vh - 220px));
+}
+.imaging-viewer-details {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.imaging-viewer-details h3 { margin: -8px 0 0; overflow-wrap: anywhere; font: 700 17px Manrope; line-height: 1.3; }
+.imaging-viewer-details dl { display: grid; gap: 12px; margin: 0; }
+.imaging-viewer-details dl div { display: grid; gap: 3px; }
+.imaging-viewer-details dt { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.imaging-viewer-details dd { margin: 0; color: var(--text); font-size: 13px; line-height: 1.45; text-transform: capitalize; }
+.viewer-download { margin-top: auto; justify-content: center; text-decoration: none; }
+
+.imaging-viewer-canvas {
+  display: grid;
+  place-items: center;
+  min-height: 480px;
+  overflow: hidden;
+  color: #d7e8ea;
+  border: 1px solid #1d3b44;
+  border-radius: 18px;
+  background: #0d1b22;
+}
+.imaging-viewer-canvas > p { color: #b5c9cb; }
+.imaging-viewer-canvas img { display: block; width: 100%; height: 100%; max-height: calc(100vh - 220px); object-fit: contain; }
+.imaging-viewer-canvas iframe { display: block; width: 100%; height: min(720px, calc(100vh - 220px)); border: 0; background: #fff; }
+.unsupported-imaging { display: grid; justify-items: center; gap: 10px; max-width: 420px; padding: 32px; text-align: center; }
+.unsupported-imaging strong { color: #fff; font: 700 18px Manrope; }
+.unsupported-imaging span { color: #b5c9cb; line-height: 1.55; }
+.unsupported-imaging .primary { margin-top: 8px; text-decoration: none; }
+
+@media (max-width: 760px) {
+  .imaging-viewer-layout { grid-template-columns: 1fr; min-height: 0; }
+  .imaging-viewer-details { gap: 12px; }
+  .imaging-viewer-canvas { min-height: 360px; border-radius: 15px; }
+  .imaging-viewer-canvas img { max-height: 68vh; }
+  .imaging-viewer-canvas iframe { height: 68vh; }
+}
