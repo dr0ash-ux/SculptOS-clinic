@@ -275,7 +275,7 @@ export default function App() {
   }
   const saveClinicalFile = async (patientId: string, values: Record<string, string>) => {
     if (!workspace) return
-    const { data, error } = await supabase.from('patients').update({ ...values, weight_kg: values.weight_kg ? Number(values.weight_kg) : null, updated_at: new Date().toISOString() }).eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
+    const { data, error } = await supabase.from('patients').update({ ...values, weight_kg: values.weight_kg ? Number(values.weight_kg) : null, missed_appointments: Number(values.missed_appointments || 0), reminder_count: Number(values.reminder_count || 0), next_follow_up_date: values.next_follow_up_date || null, updated_at: new Date().toISOString() }).eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
     if (error) { setNotice(error.message); return }
     setPatients(current => current.map(patient => patient.id === patientId ? data as Patient : patient))
     setNotice('Clinical file saved.')
