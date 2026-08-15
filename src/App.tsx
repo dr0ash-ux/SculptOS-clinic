@@ -20,14 +20,17 @@ type Appointment = {
   scheduled_at: string; duration_minutes: number; treatment_label: string; status: string; notes: string | null
 }
 type Slot = { date: Date; label: string }
+type DoctorLeave = { id: string; doctor: string; startDate: string; endDate: string; startTime: string; endTime: string }
+type ClinicSchedule = { open: string; close: string; closedDays: number[]; leaves: DoctorLeave[] }
+const defaultSchedule: ClinicSchedule = { open: '10:00', close: '18:00', closedDays: [0], leaves: [] }
 
 const doctors = [
   { name: 'Dr. Aishwarya Jain', color: 'teal' as const },
   { name: 'Dr. Agarwal', color: 'violet' as const },
   { name: 'Dr. Reddy', color: 'amber' as const },
 ]
-const timeLabels = Array.from({ length: 22 }, (_, index) => {
-  const total = 8 * 60 + index * 30
+const timeLabels = Array.from({ length: 31 }, (_, index) => {
+  const total = 7 * 60 + index * 30
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 })
 const emptyPatient = {
@@ -64,6 +67,7 @@ function greeting() {
   const hour = new Date().getHours()
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 }
+function minutesFromTime(value: string) { const [hours, minutes] = value.split(':').map(Number); return hours * 60 + minutes }
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
@@ -84,6 +88,7 @@ export default function App() {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
   const [patientModalOpen, setPatientModalOpen] = useState(false)
   const [appointmentSlot, setAppointmentSlot] = useState<Slot | null>(null)
+  const [clinicSchedule, setClinicSchedule] = useState<ClinicSchedule>(() => { try { return { ...defaultSchedule, ...JSON.parse(localStorage.getItem('sculptos-clinic-schedule') || '{}') } } catch { return defaultSchedule } })
 
   const loadRecords = useCallback(async (activeWorkspace: Workspace) => {
     const [patientResponse, appointmentResponse] = await Promise.all([
@@ -153,6 +158,7 @@ export default function App() {
     }
   }, [initializeWorkspace])
 
+  const saveClinicSchedule = (schedule: ClinicSchedule) => { setClinicSchedule(schedule); localStorage.setItem('sculptos-clinic-schedule', JSON.stringify(schedule)); setNotice('Clinic schedule updated.') }
   const selectedPatient = patients.find(patient => patient.id === selectedPatientId) || null
   const filteredPatients = useMemo(() => patients.filter(patient =>
     `${patientName(patient)} ${patient.patient_number} ${patient.treatment_advised || ''}`.toLowerCase().includes(query.toLowerCase()),
@@ -259,10 +265,10 @@ export default function App() {
       {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       <div className="page">
         {view === 'dashboard' && <Dashboard patients={patients} appointments={appointments} setView={setView} setPatientModalOpen={setPatientModalOpen} />}
-        {view === 'appointments' && <section><Hero eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
-        {view === 'booking' && appointmentSlot && <BookingPage slot={appointmentSlot} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
+        {view === 'appointments' && <section><Hero eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
+        {view === 'booking' && appointmentSlot && <BookingPage slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} selectedPatient={selectedPatient} onSelect={setSelectedPatientId} onNew={() => setPatientModalOpen(true)} onBook={patient => { setSelectedPatientId(patient.id); setAppointmentSlot({ date: new Date(), label: '' }) }} />}
-        {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
+        {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} schedule={clinicSchedule} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
         {!['dashboard', 'appointments', 'patients', 'settings'].includes(view) && <PlaceholderPage view={view} />}
       </div>
     </main>
