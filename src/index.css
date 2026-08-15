@@ -79,3 +79,22 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 @media(max-width:960px){.patient-file-page{max-width:none}.clinical-file-shell{grid-template-columns:1fr}.clinical-sidebar{position:static;grid-template-columns:1.2fr repeat(2,1fr);align-items:start}.clinical-patient-card{padding:0;border:0}.clinical-risk{display:none}.clinical-nav{display:flex;gap:4px;padding:0;border:0}.clinical-nav button{grid-template-columns:22px 1fr;padding:8px}.clinical-nav button svg{display:none}.clinical-file-intro{margin-top:4px}}
 @media(max-width:650px){.clinical-sidebar{grid-template-columns:1fr;gap:11px}.clinical-snapshot{grid-template-columns:repeat(3,minmax(0,1fr))}.clinical-nav{overflow:auto}.clinical-nav button{min-width:138px}.clinical-file-intro{align-items:flex-start;flex-direction:column}.clinical-progress{width:100%}.clinical-progress span{flex:1;text-align:center}.clinical-section{padding:16px;border-radius:15px}.clinical-action-bar{align-items:stretch;flex-direction:column;bottom:8px}.clinical-action-bar>div:last-child{display:grid;grid-template-columns:1fr 1fr}.clinical-action-bar button{width:100%}}
 @media(max-width:440px){.clinical-snapshot{grid-template-columns:1fr}.clinical-action-bar>div:last-child{grid-template-columns:1fr}.clinical-action-bar .ghost{display:none}}
+
+
+/* Clinical-file suggestion controls: compact, aligned and intentionally quiet */
+.clinical-section .form-grid{align-items:stretch}
+.clinical-section .form-grid>label{display:flex;flex-direction:column;min-width:0}
+.clinical-section .form-grid.two>label{height:100%}
+.clinical-section .form-grid.two>label>textarea{flex:1}
+.clinical-assessment-grid{grid-auto-rows:1fr}
+.clinical-assessment-grid>label{min-height:208px}
+.clinical-suggestion-field>span{display:block;margin-bottom:7px}
+.clinical-section .clinical-suggestion-field>select{width:100%;height:40px;margin:0 0 8px;padding:0 11px;border-color:#c8dfec;background:#eaf6fc;color:#355b70;font-weight:600}
+.clinical-section .clinical-suggestion-field>select:focus{border-color:#8fc7e1;box-shadow:0 0 0 3px rgba(130,194,223,.2)}
+.clinical-suggestion-field>textarea{flex:1;min-height:110px}
+.custom-suggestion-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin:0 0 8px}
+.clinical-section .custom-suggestion-entry input{height:39px;margin:0;border-color:#c8dfec;background:#f7fcff}
+.custom-suggestion-entry button{height:39px;padding:0 12px;border-radius:9px;background:#cfeaf7;color:#28536a;font-size:11px;font-weight:700}
+.custom-suggestion-entry button:hover{background:#b9e0f2}
+.clinical-section .form-grid.two label>input,.clinical-section .form-grid.two label>select{height:42px}
+@media(max-width:650px){.clinical-assessment-grid>label{min-height:0}.clinical-suggestion-field>textarea{min-height:100px}}
