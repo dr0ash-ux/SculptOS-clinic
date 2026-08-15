@@ -123,3 +123,11 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .clinical-section .form-grid.two>label>input,
 .clinical-section .form-grid.two>label>select{height:42px}
 @media(max-width:650px){.clinical-section-head{padding:11px 12px}.clinical-section .form-grid.two>label:not(.clinical-suggestion-field){grid-template-rows:18px auto}}
+
+
+/* Patient title before name */
+.patient-name-entry{grid-column:span 2;display:grid;grid-template-columns:120px minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:end}
+.booking-form .patient-name-entry{grid-template-columns:120px minmax(0,1fr)}
+.patient-name-entry label{min-width:0}
+.patient-name-entry select,.patient-name-entry input{width:100%}
+@media(max-width:650px){.patient-name-entry,.booking-form .patient-name-entry{grid-column:span 1;grid-template-columns:1fr}.patient-name-entry{gap:10px}}
