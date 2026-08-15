@@ -6,8 +6,10 @@ import {
 } from 'lucide-react'
 import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/supabase'
 
-type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings'
+type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
+type Branch = { id: string; organization_id: string; name: string; timezone: string }
+type BranchMetric = { id: string; name: string; patientCount: number; appointmentCount: number }
 type Patient = {
   id: string; patient_number: string; first_name: string; last_name: string | null; date_of_birth: string | null
   sex: string | null; phone: string | null; email: string | null; location: string | null; occupation: string | null
@@ -77,6 +79,8 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard')
   const [sidebar, setSidebar] = useState(true)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [branchMetrics, setBranchMetrics] = useState<BranchMetric[]>([])
   const [profileName, setProfileName] = useState('Dr. Aishwarya Jain')
   const [email, setEmail] = useState('')
   const [patients, setPatients] = useState<Patient[]>([])
@@ -99,6 +103,26 @@ export default function App() {
     if (appointmentResponse.error) setNotice(appointmentResponse.error.message)
     setPatients((patientResponse.data || []) as Patient[])
     setAppointments((appointmentResponse.data || []) as Appointment[])
+  }, [])
+
+  const loadBranches = useCallback(async (activeWorkspace: Workspace) => {
+    const branchResponse = await supabase.from('clinics').select('id, organization_id, name, timezone').eq('organization_id', activeWorkspace.organizationId).eq('active', true).order('name')
+    if (branchResponse.error) { setNotice(branchResponse.error.message); return [] as Branch[] }
+    const available = (branchResponse.data || []) as Branch[]
+    setBranches(available)
+    const ids = available.map(branch => branch.id)
+    if (!ids.length) { setBranchMetrics([]); return available }
+    const [patientResponse, appointmentResponse] = await Promise.all([
+      supabase.from('patients').select('clinic_id').in('clinic_id', ids),
+      supabase.from('appointments').select('clinic_id').in('clinic_id', ids),
+    ])
+    setBranchMetrics(available.map(branch => ({
+      id: branch.id,
+      name: branch.name,
+      patientCount: (patientResponse.data || []).filter(item => item.clinic_id === branch.id).length,
+      appointmentCount: (appointmentResponse.data || []).filter(item => item.clinic_id === branch.id).length,
+    })))
+    return available
   }, [])
 
   const initializeWorkspace = useCallback(async (user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> }) => {
@@ -127,9 +151,13 @@ export default function App() {
     const profileResponse = await supabase.from('profiles').select('full_name').eq('id', user.id).maybeSingle()
     setProfileName(profileResponse.data?.full_name || fullName)
     setEmail(user.email || '')
-    setWorkspace(nextWorkspace)
-    await loadRecords(nextWorkspace)
-  }, [loadRecords])
+    const available = await loadBranches(nextWorkspace)
+    const savedBranchId = localStorage.getItem(`sculptos-active-branch-${user.id}`)
+    const selectedBranch = available.find(branch => branch.id === savedBranchId) || available.find(branch => branch.id === nextWorkspace.clinicId) || available[0]
+    const selectedWorkspace = selectedBranch ? { ...nextWorkspace, clinicId: selectedBranch.id, clinicName: selectedBranch.name } : nextWorkspace
+    setWorkspace(selectedWorkspace)
+    await loadRecords(selectedWorkspace)
+  }, [loadBranches, loadRecords])
 
   useEffect(() => {
     let alive = true
@@ -234,6 +262,30 @@ export default function App() {
     setNotice('Patient record created and appointment confirmed.')
   }
 
+  const switchBranch = async (branch: Branch) => {
+    if (!workspace) return
+    const user = (await supabase.auth.getUser()).data.user
+    const next = { ...workspace, clinicId: branch.id, clinicName: branch.name }
+    setWorkspace(next)
+    if (user) localStorage.setItem(`sculptos-active-branch-${user.id}`, branch.id)
+    await loadRecords(next)
+    setSelectedPatientId(null)
+    setView('dashboard')
+    setNotice(`Now viewing ${branch.name}.`)
+  }
+  const createBranch = async (name: string) => {
+    if (!workspace || !name.trim()) return
+    const { data, error } = await supabase.rpc('create_clinic_branch', { p_organization_id: workspace.organizationId, p_name: name.trim() })
+    if (error) { setNotice(error.message); return }
+    const row = data?.[0]
+    if (!row) { setNotice('Branch could not be created.'); return }
+    const branch = { id: row.clinic_id, organization_id: workspace.organizationId, name: row.clinic_name, timezone: 'Asia/Kolkata' }
+    setBranches(current => [...current, branch].sort((a, b) => a.name.localeCompare(b.name)))
+    setBranchMetrics(current => [...current, { id: branch.id, name: branch.name, patientCount: 0, appointmentCount: 0 }])
+    await switchBranch(branch)
+    setNotice(`${branch.name} is ready for setup.`)
+  }
+
   const handleLogout = async () => {
     const { error } = await signOut()
     if (error) setNotice(error.message)
@@ -245,7 +297,7 @@ export default function App() {
   const nav: Array<[View, string, typeof LayoutDashboard]> = [
     ['dashboard', 'Overview', LayoutDashboard], ['appointments', 'Appointments', CalendarDays], ['patients', 'Patients', Users],
     ['crm', 'CRM', ClipboardList], ['inventory', 'Inventory', Package], ['prescriptions', 'Pharmacy & Rx', FileText],
-    ['finance', 'Finance', WalletCards], ['ai', 'AI Studio', Activity], ['reports', 'Reports', FileText],
+    ['finance', 'Finance', WalletCards], ['imports', 'Import centre', FileText], ['ai', 'AI Studio', Activity], ['reports', 'Reports', FileText],
   ]
 
   return <div className="app">
@@ -263,16 +315,17 @@ export default function App() {
       <header className="topbar">
         <button className="icon-btn" aria-label="Toggle navigation" onClick={() => setSidebar(value => !value)}><Menu size={19} /></button>
         <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\.\s*/, 'Dr. ')}` : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
-        <div className="top-actions"><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
+        <div className="top-actions"><BranchSelector active={workspace.clinicId} branches={branches} onSelect={switchBranch} /><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
       </header>
       {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
       <div className="page">
-        {view === 'dashboard' && <Dashboard patients={patients} appointments={appointments} schedule={clinicSchedule} setView={setView} setPatientModalOpen={setPatientModalOpen} />}
+        {view === 'dashboard' && <Dashboard patients={patients} appointments={appointments} schedule={clinicSchedule} branchMetrics={branchMetrics} setView={setView} setPatientModalOpen={setPatientModalOpen} />}
         {view === 'appointments' && <section><Hero eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
         {view === 'booking' && appointmentSlot && <BookingPage slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} selectedPatient={selectedPatient} onSelect={setSelectedPatientId} onNew={() => setPatientModalOpen(true)} onBook={patient => { setSelectedPatientId(patient.id); setAppointmentSlot({ date: new Date(), label: '' }) }} />}
-        {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} schedule={clinicSchedule} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
-        {!['dashboard', 'appointments', 'patients', 'settings'].includes(view) && <PlaceholderPage view={view} />}
+        {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
+        {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
+        {!['dashboard', 'appointments', 'patients', 'settings', 'imports'].includes(view) && <PlaceholderPage view={view} />}
       </div>
     </main>
     {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
