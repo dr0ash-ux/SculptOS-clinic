@@ -96,6 +96,11 @@ export default function App() {
   const [appointmentSlot, setAppointmentSlot] = useState<Slot | null>(null)
   const [clinicSchedule, setClinicSchedule] = useState<ClinicSchedule>(() => { try { return { ...defaultSchedule, ...JSON.parse(localStorage.getItem('sculptos-clinic-schedule') || '{}') } } catch { return defaultSchedule } })
 
+  const navigateTo = (nextView: View) => {
+    setView(nextView)
+    if (window.innerWidth <= 760) setSidebar(false)
+  }
+
   const loadRecords = useCallback(async (activeWorkspace: Workspace) => {
     const [patientResponse, appointmentResponse] = await Promise.all([
       supabase.from('patients').select('*').eq('clinic_id', activeWorkspace.clinicId).order('created_at', { ascending: false }),
@@ -324,10 +329,10 @@ export default function App() {
     <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'}>
       {sidebar && <button className="mobile-drawer-close" type="button" aria-label="Close navigation" onClick={() => setSidebar(false)}><X size={20} /></button>}
       <div className="brand"><div className="brand-mark">S</div>{sidebar && <div><b>SculptOS</b><span>CLINIC</span></div>}</div>
-      {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => setView('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
-      <nav>{nav.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav-item active' : 'nav-item'} onClick={() => setView(id)}><Icon size={18} />{sidebar && <span>{label}</span>}</button>)}</nav>
+      {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => navigateTo('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
+      <nav>{nav.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo(id)}><Icon size={18} />{sidebar && <span>{label}</span>}</button>)}</nav>
       <div className="side-bottom">
-        <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => setView('settings')}><Settings size={18} />{sidebar && <span>Settings</span>}</button>
+        <button className={view === 'settings' ? 'nav-item active' : 'nav-item'} onClick={() => navigateTo('settings')}><Settings size={18} />{sidebar && <span>Settings</span>}</button>
         <button className="nav-item logout" onClick={handleLogout}><LogOut size={18} />{sidebar && <span>Log out</span>}</button>
         <div className="profile-mini"><div className="avatar">{initials(profileName)}</div>{sidebar && <div><b>{profileName}</b><span>{workspace.role}</span></div>}</div>
       </div>
