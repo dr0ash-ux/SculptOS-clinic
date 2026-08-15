@@ -19,3 +19,7 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 
 
 .subscription-card{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}.subscription-card h3{margin:.3rem 0;font-size:18px}.subscription-card p{margin:0;color:var(--muted);font-size:13px}.subscription-usage{min-width:118px;padding:11px 14px;border-radius:11px;background:var(--soft);text-align:center}.subscription-usage b{display:block;font-size:18px}.subscription-usage span{display:block;margin-top:2px;color:var(--muted);font-size:11px}.upgrade-note{margin:12px 0 0;color:var(--muted);font-size:12px}@media(max-width:560px){.subscription-card{align-items:flex-start;flex-direction:column}.subscription-usage{width:100%;box-sizing:border-box}}
+
+
+/* Clinical patient file */
+.clinical-file{align-self:start;max-height:none}.clinical-file .detail-head{padding-bottom:14px;border-bottom:1px solid var(--line)}.file-section{padding:18px 0;border-bottom:1px solid var(--line)}.file-section h4{margin:0 0 13px;font-size:14px}.clinical-select{margin:7px 0}.clinical-select select{width:100%}.clinical-file textarea{min-height:76px}.clinical-file-actions{display:flex;justify-content:space-between;gap:12px;padding-top:18px}@media(max-width:650px){.clinical-file-actions{flex-direction:column-reverse}.clinical-file-actions button{width:100%}}
