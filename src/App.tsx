@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/supabase'
 
-type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports'
+type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'imaging_viewer' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
 type Branch = { id: string; organization_id: string; name: string; timezone: string }
 type BranchMetric = { id: string; name: string; patientCount: number; appointmentCount: number }
@@ -98,6 +98,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState('')
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
+  const [selectedImagingAsset, setSelectedImagingAsset] = useState<ImagingAsset | null>(null)
   const [patientModalOpen, setPatientModalOpen] = useState(false)
   const [appointmentSlot, setAppointmentSlot] = useState<Slot | null>(null)
   const [clinicSchedule, setClinicSchedule] = useState<ClinicSchedule>(() => { try { return { ...defaultSchedule, ...JSON.parse(localStorage.getItem('sculptos-clinic-schedule') || '{}') } } catch { return defaultSchedule } })
@@ -355,7 +356,8 @@ export default function App() {
         {view === 'appointments' && <section className="appointments-page"><Hero showHeader eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
         {view === 'booking' && appointmentSlot && <BookingPage slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} onOpenFile={patientId => { setSelectedPatientId(patientId); setView('patient_file') }} onNew={() => setPatientModalOpen(true)} />}
-        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} />}
+        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} />}
+        {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_file')} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
         {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports'].includes(view) && <PlaceholderPage view={view} />}
@@ -466,18 +468,57 @@ function PatientsPage({ patients, onOpenFile, onNew }: { patients: Patient[]; on
   return <section><Hero showHeader eyebrow="PATIENTS" title="Patient management" copy="A branch-wide registry for follow-ups, reminders and clinical records." action={<button className="primary" onClick={onNew}><Plus size={16} /> New patient</button>} /><div className="panel patient-panel registry-panel"><div className="filter-row"><div><b>{patients.length} patients</b><span>Click a patient to open their full clinical file.</span></div><div className="registry-headings"><span>Follow-up</span><span>Scheme / group</span><span>Engagement</span></div></div>{patients.length ? patients.map(patient => <button className="patient-row registry-row" key={patient.id} onClick={() => onOpenFile(patient.id)}><div className="patient-name"><div className="avatar">{initials(patientName(patient))}</div><div><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone saved'}</span></div></div><div className="registry-item"><b>{patient.next_follow_up_date ? new Date(`${patient.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'}</b><span>{patient.missed_appointments} missed appointment{patient.missed_appointments === 1 ? '' : 's'}</span></div><div className="registry-item"><b>{patient.payer_group || 'Self-pay'}</b><span>{patient.primary_diagnosis || 'No diagnosis recorded'}</span></div><div className="registry-item"><b>{patient.reminder_count} reminder{patient.reminder_count === 1 ? '' : 's'}</b><span>Calls / bot attempts</span></div><ChevronRight size={16} /></button>) : <EmptyState label="No patient records yet. Add your first patient to begin the clinic workflow." />}</div></section>
 }
 
-function PatientFilePage({ patient, onBack, onSave, onBook }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
-  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} /></section>
+function PatientFilePage({ patient, onBack, onSave, onBook, onOpenImaging }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImaging: (asset: ImagingAsset) => void }) {
+  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} onOpenImaging={onOpenImaging} /></section>
 }
 
-function ImagingLibrary({ patient }: { patient: Patient }) {
+function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset: ImagingAsset; onBack: () => void }) {
+  const [url, setUrl] = useState('')
+  const [error, setError] = useState('')
+  const previewable = asset.mime_type?.startsWith('image/') || asset.mime_type === 'application/pdf'
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      const { data, error: signedUrlError } = await supabase.storage.from('patient-imaging').createSignedUrl(asset.storage_path, 15 * 60)
+      if (!active) return
+      if (signedUrlError || !data?.signedUrl) { setError(signedUrlError?.message || 'Unable to open this image.'); return }
+      setUrl(data.signedUrl)
+    }
+    void load()
+    return () => { active = false }
+  }, [asset.storage_path])
+
+  return <section className="imaging-viewer-page">
+    <Hero eyebrow="PATIENT IMAGING" title={asset.asset_type === 'opg' ? 'OPG viewer' : 'Imaging viewer'} copy={`${patientName(patient)} · ${asset.file_name}`} action={<button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to clinical file</button>} />
+    <div className="imaging-viewer-layout">
+      <aside className="imaging-viewer-details">
+        <span className="eyebrow">REGISTERED FILE</span>
+        <h3>{asset.file_name}</h3>
+        <dl>
+          <div><dt>Type</dt><dd>{asset.asset_type.replace(/_/g, ' ')}</dd></div>
+          <div><dt>Captured</dt><dd>{new Date(asset.captured_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</dd></div>
+          <div><dt>Patient</dt><dd>{patientName(patient)}</dd></div>
+          {asset.notes && <div><dt>Note</dt><dd>{asset.notes}</dd></div>}
+        </dl>
+        {url && <a className="ghost viewer-download" href={url} target="_blank" rel="noreferrer">Open in new tab</a>}
+      </aside>
+      <div className="imaging-viewer-canvas">
+        {!url && !error && <p>Opening secure image…</p>}
+        {error && <p>{error}</p>}
+        {url && previewable && (asset.mime_type === 'application/pdf' ? <iframe title={asset.file_name} src={url} /> : <img src={url} alt={asset.file_name} />)}
+        {url && !previewable && <div className="unsupported-imaging"><strong>Specialised viewer required</strong><span>This file is safely registered. DICOM and STL viewing will open here once their specialised viewer is connected.</span><a className="primary" href={url} target="_blank" rel="noreferrer">Download file</a></div>}
+      </div>
+    </div>
+  </section>
+}
+
+function ImagingLibrary({ patient, onOpenImaging }: { patient: Patient; onOpenImaging: (asset: ImagingAsset) => void }) {
   const [assets, setAssets] = useState<ImagingAsset[]>([])
   const [assetType, setAssetType] = useState<ImagingAsset['asset_type']>('opg')
   const [note, setNote] = useState('')
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [previewName, setPreviewName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const types: { id: ImagingAsset['asset_type']; title: string; detail: string }[] = [
     { id: 'opg', title: 'OPG', detail: 'Panoramic radiograph' },
@@ -516,15 +557,7 @@ function ImagingLibrary({ patient }: { patient: Patient }) {
     await loadAssets()
   }
 
-  const openPreview = async (asset: ImagingAsset) => {
-    if (!asset.mime_type?.startsWith('image/') && asset.mime_type !== 'application/pdf') {
-      setMessage('This file is safely registered. A specialised viewer is needed for this format.')
-      return
-    }
-    const { data, error } = await supabase.storage.from('patient-imaging').createSignedUrl(asset.storage_path, 15 * 60)
-    if (error || !data?.signedUrl) { setMessage(error?.message || 'Unable to open this file.'); return }
-    setPreviewUrl(data.signedUrl); setPreviewName(asset.file_name)
-  }
+  const openPreview = (asset: ImagingAsset) => onOpenImaging(asset)
 
   const labelFor = (type: ImagingAsset['asset_type']) => types.find(item => item.id === type)?.title || 'Imaging'
 
@@ -541,7 +574,6 @@ function ImagingLibrary({ patient }: { patient: Patient }) {
     </div>
     <label className="imaging-note"><span className="field-label">Image note <em>optional</em></span><input value={note} onChange={event => setNote(event.target.value)} placeholder="e.g. Pre-operative OPG from external radiology centre" /></label>
     {message && <p className="imaging-message">{message}</p>}
-    {previewUrl && <div className="imaging-preview"><div><strong>{previewName}</strong><button type="button" onClick={() => { setPreviewUrl(null); setPreviewName('') }}>Close preview</button></div>{previewName.toLowerCase().endsWith('.pdf') ? <iframe title={previewName} src={previewUrl} /> : <img src={previewUrl} alt={previewName} />}</div>}
     <div className="imaging-history">
       <div className="imaging-history-head"><strong>Imaging timeline</strong><span>{assets.length ? `${assets.length} file${assets.length === 1 ? '' : 's'} registered` : 'No imaging uploaded yet'}</span></div>
       {assets.length > 0 && <div className="imaging-list">{assets.map(asset => <button type="button" className="imaging-item" key={asset.id} onClick={() => void openPreview(asset)}><span className="imaging-badge">{labelFor(asset.asset_type)}</span><span><strong>{asset.file_name}</strong><small>{new Date(asset.captured_at + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{asset.notes ? ` · ${asset.notes}` : ''}</small></span><ChevronRight size={16} /></button>)}</div>}
@@ -549,7 +581,7 @@ function ImagingLibrary({ patient }: { patient: Patient }) {
   </div>
 }
 
-function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
+function ClinicalFile({ patient, onSave, onBook, onOpenImaging }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImaging: (asset: ImagingAsset) => void }) {
   const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '', next_follow_up_date: patient.next_follow_up_date || '', payer_group: patient.payer_group || 'Self-pay', missed_appointments: String(patient.missed_appointments || 0), reminder_count: String(patient.reminder_count || 0) })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
@@ -667,7 +699,7 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <div><span className="section-number">04</span><div><h3>Imaging & uploads</h3><p>Register OPGs and other patient records securely in one clinical imaging library.</p></div></div>
           <FileText size={19} />
         </div>
-        <ImagingLibrary patient={patient} />
+        <ImagingLibrary patient={patient} onOpenImaging={onOpenImaging} />
       </section>
 
       <section className="clinical-section" id="care-coordination">
