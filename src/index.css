@@ -174,3 +174,13 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .page-action-row{display:flex;justify-content:flex-end;align-items:center;min-height:40px;margin:0 0 16px}
 .page-action-row .ghost{display:inline-flex;align-items:center;gap:7px}
 @media(max-width:650px){.page-action-row{margin-bottom:12px}.topbar{padding:0 16px}.crumb b{font-size:14px}.crumb span{font-size:10px}}
+
+
+/* Full-width day sheet */
+.calendar-toolbar{position:relative}
+.single-day-toolbar-date{position:absolute;left:50%;transform:translateX(-50%);max-width:42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font:700 13px Manrope}
+.calendar.single-day{width:100%;min-width:0;grid-template-columns:76px minmax(0,1fr)}
+.calendar.single-day .day-col{width:100%;min-width:0}
+.calendar.single-day .day-head{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.calendar.single-day .hour{width:100%}
+@media(max-width:850px){.single-day-toolbar-date{position:static;transform:none;order:2;max-width:none;font-size:12px}.calendar-toolbar{flex-wrap:wrap}.calendar-toolbar .calendar-title{order:1}.calendar-toolbar .calendar-actions{order:3;margin-left:auto}}
