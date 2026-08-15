@@ -98,3 +98,28 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .custom-suggestion-entry button:hover{background:#b9e0f2}
 .clinical-section .form-grid.two label>input,.clinical-section .form-grid.two label>select{height:42px}
 @media(max-width:650px){.clinical-assessment-grid>label{min-height:0}.clinical-suggestion-field>textarea{min-height:100px}}
+
+
+/* Symmetrical clinical-file layout and coloured section banners */
+.clinical-section-head{align-items:center;margin:0 0 18px;padding:13px 15px;border:1px solid transparent;border-radius:13px}
+.clinical-section-head>div{align-items:center}
+.clinical-section-head>svg{margin:0}
+#medical-screening .clinical-section-head{background:#eaf6fc;border-color:#d5eaf5;color:#35637a}
+#presenting-problem .clinical-section-head{background:#f1effd;border-color:#e2def8;color:#625b99}
+#clinical-assessment .clinical-section-head{background:#fff1e8;border-color:#f7dfcf;color:#9a6549}
+#care-coordination .clinical-section-head{background:#fff8df;border-color:#f2e7b7;color:#887131}
+.clinical-section-head h3{font-size:15px}
+.clinical-section .form-grid.two{grid-auto-rows:minmax(0,auto)}
+.clinical-section .form-grid.two>label:not(.clinical-suggestion-field){display:grid;grid-template-rows:18px minmax(42px,1fr);align-content:start;gap:7px;min-width:0}
+.clinical-section .form-grid.two>label:not(.clinical-suggestion-field)>input,
+.clinical-section .form-grid.two>label:not(.clinical-suggestion-field)>select,
+.clinical-section .form-grid.two>label:not(.clinical-suggestion-field)>textarea{margin-top:0}
+.clinical-section .form-grid.two>label:not(.clinical-suggestion-field)>textarea{min-height:94px}
+.clinical-section .field-label{display:block;min-height:18px;color:var(--text);font-size:12px;font-weight:600;line-height:18px}
+.clinical-section .field-label .input-unit{margin-left:3px;color:var(--muted);font-weight:400}
+.clinical-section .form-grid.two>label .field-help{align-self:start;margin-top:0}
+.clinical-section .form-grid.two>label:has(.field-help){grid-template-rows:18px 42px auto}
+.clinical-section .form-grid.two>label:has(textarea){grid-template-rows:18px minmax(94px,1fr)}
+.clinical-section .form-grid.two>label>input,
+.clinical-section .form-grid.two>label>select{height:42px}
+@media(max-width:650px){.clinical-section-head{padding:11px 12px}.clinical-section .form-grid.two>label:not(.clinical-suggestion-field){grid-template-rows:18px auto}}
