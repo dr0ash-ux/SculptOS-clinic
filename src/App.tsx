@@ -322,6 +322,7 @@ export default function App() {
 
   return <div className="app">
     <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'}>
+      {sidebar && <button className="mobile-drawer-close" type="button" aria-label="Close navigation" onClick={() => setSidebar(false)}><X size={20} /></button>}
       <div className="brand"><div className="brand-mark">S</div>{sidebar && <div><b>SculptOS</b><span>CLINIC</span></div>}</div>
       {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => setView('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
       <nav>{nav.map(([id, label, Icon]) => <button key={id} className={view === id ? 'nav-item active' : 'nav-item'} onClick={() => setView(id)}><Icon size={18} />{sidebar && <span>{label}</span>}</button>)}</nav>
