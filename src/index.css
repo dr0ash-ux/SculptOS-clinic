@@ -244,3 +244,64 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
   .hero-row .primary{width:100%;justify-content:center}
   .calendar-actions .date-trigger span{display:none}
 }
+
+
+/* Complete navigation drawer on phones: preserve the full desktop information hierarchy. */
+@media (max-width: 760px) {
+  .sidebar:not(.collapsed) {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    pointer-events: auto;
+  }
+
+  .sidebar.collapsed {
+    pointer-events: none;
+  }
+
+  .sidebar:not(.collapsed) .brand {
+    display: flex !important;
+    padding: 2px 10px 24px !important;
+  }
+
+  .sidebar:not(.collapsed) .brand > div:not(.brand-mark),
+  .sidebar:not(.collapsed) .nav-item > span {
+    display: block !important;
+  }
+
+  .sidebar:not(.collapsed) .workspace {
+    display: block !important;
+    padding: 0 10px 15px !important;
+  }
+
+  .sidebar:not(.collapsed) nav {
+    display: grid !important;
+    gap: 4px !important;
+  }
+
+  .sidebar:not(.collapsed) .nav-item {
+    display: flex !important;
+    width: 100% !important;
+    height: 46px !important;
+  }
+
+  .sidebar:not(.collapsed) .side-bottom {
+    display: grid !important;
+    gap: 8px !important;
+    margin-top: auto !important;
+  }
+
+  .sidebar:not(.collapsed) .side-bottom .nav-item {
+    display: flex !important;
+  }
+
+  .sidebar:not(.collapsed) .profile-mini {
+    display: flex !important;
+    padding: 17px 8px 4px !important;
+    border-top: 1px solid var(--line) !important;
+  }
+
+  .sidebar:not(.collapsed) .profile-mini > div:last-child {
+    display: block !important;
+  }
+}
