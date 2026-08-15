@@ -67,6 +67,7 @@ function greeting() {
   const hour = new Date().getHours()
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 }
+function appointmentsOverlap(startA: string, durationA: number, startB: string, durationB: number) { const a = new Date(startA).getTime(), b = new Date(startB).getTime(); return a < b + durationB * 60000 && b < a + durationA * 60000 }
 function minutesFromTime(value: string) { const [hours, minutes] = value.split(':').map(Number); return hours * 60 + minutes }
 function formatTime(value: string) {
   return new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -211,6 +212,9 @@ export default function App() {
   }
   const createBooking = async (values: typeof emptyPatient, doctor: typeof doctors[number], duration: number, treatment: string, notes: string) => {
     if (!workspace || !appointmentSlot) return
+    if (appointments.some(item => item.clinician_name === doctor.name && appointmentsOverlap(appointmentSlot.date.toISOString(), duration, item.scheduled_at, item.duration_minutes))) { setNotice('This doctor already has an appointment in that time period.'); return }
+    const leaveConflict = clinicSchedule.leaves.some(item => item.doctor === doctor.name && dateKey(appointmentSlot.date) >= item.startDate && dateKey(appointmentSlot.date) <= item.endDate && minutesFromTime(slot.label || formatTime(appointmentSlot.date.toISOString())) < minutesFromTime(item.endTime) && minutesFromTime(slot.label || formatTime(appointmentSlot.date.toISOString())) + duration > minutesFromTime(item.startTime))
+    if (leaveConflict) { setNotice('This doctor is on leave for the selected appointment time.'); return }
     const user = (await supabase.auth.getUser()).data.user
     const patientNumber = `SC-${String(Date.now()).slice(-6)}`
     const { data: patientData, error: patientError } = await supabase.from('patients').insert({
