@@ -184,3 +184,11 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 .calendar.single-day .day-head{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .calendar.single-day .hour{width:100%}
 @media(max-width:850px){.single-day-toolbar-date{position:static;transform:none;order:2;max-width:none;font-size:12px}.calendar-toolbar{flex-wrap:wrap}.calendar-toolbar .calendar-title{order:1}.calendar-toolbar .calendar-actions{order:3;margin-left:auto}}
+
+
+/* Selected date is intentionally prominent in day view */
+.calendar-panel .single-day-toolbar-date{display:grid;justify-items:center;gap:1px;min-width:160px;padding:3px 10px;border-radius:10px;background:var(--surface2);color:var(--text)}
+.calendar-panel .single-day-toolbar-date span{font-size:9px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.calendar-panel .single-day-toolbar-date b{font:700 14px Manrope}
+.calendar-scroll>.calendar.single-day{display:grid!important;width:100%!important;min-width:0!important;max-width:none!important;grid-template-columns:76px minmax(0,1fr)!important}
+.calendar-scroll>.calendar.single-day>.day-col{grid-column:2;width:100%!important;min-width:0!important;max-width:none!important}
