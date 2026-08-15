@@ -468,8 +468,8 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
     setAddingCustom(current => ({ ...current, [key]: false }))
   }
   const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  const field = (key: keyof typeof values, label: string, area = false, placeholder = '') => <label><span className="field-label">{label}</span>{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />}</label>
-  const suggestionField = (key: 'investigations_advised' | 'clinical_findings', label: string, options: string[], customLabel: string, placeholder: string) => <label className="clinical-suggestion-field">
+  const field = (key: keyof typeof values, label: string, area = false) => <label><span className="field-label">{label}</span>{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} />}</label>
+  const suggestionField = (key: 'investigations_advised' | 'clinical_findings', label: string, options: string[], customLabel: string) => <label className="clinical-suggestion-field">
     <span className="field-label">{label}</span>
     <select value="" onChange={event => {
       const choice = event.target.value
@@ -480,8 +480,8 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
       {options.map(option => <option key={option} value={option}>{option}</option>)}
       <option value="__custom__">{customLabel}</option>
     </select>
-    {addingCustom[key] && <div className="custom-suggestion-entry"><input autoFocus value={customSuggestion[key]} onChange={event => setCustomSuggestion(current => ({ ...current, [key]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCustomSuggestion(key) } }} placeholder="Type here" /><button type="button" onClick={() => addCustomSuggestion(key)}>Add</button></div>}
-    <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />
+    {addingCustom[key] && <div className="custom-suggestion-entry"><input autoFocus value={customSuggestion[key]} onChange={event => setCustomSuggestion(current => ({ ...current, [key]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCustomSuggestion(key) } }} /><button type="button" onClick={() => addCustomSuggestion(key)}>Add</button></div>}
+    <textarea value={values[key]} onChange={event => set(key, event.target.value)} />
   </label>
   const followUp = values.next_follow_up_date ? new Date(`${values.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'
   const risks = [values.allergies && 'Allergies recorded', values.illness_history && 'Medical history recorded', values.current_medications && 'Medication review needed'].filter(Boolean) as string[]
@@ -531,12 +531,12 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <Activity size={19} />
         </div>
         <div className="form-grid two">
-          <label className="clinical-input-field"><span className="field-label">Weight <span className="input-unit">kg</span></span><input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)} placeholder="e.g. 62" /></label>
-          {field('blood_pressure', 'Blood pressure', false, 'e.g. 120/80 mmHg')}
-          {field('current_medications', 'Current medications', true, 'Name, dose and frequency — or “None reported”')}
-          {field('illness_history', 'History of illnesses', true, 'Diabetes, hypertension, cardiac conditions, etc.')}
-          {field('allergies', 'Allergies', true, 'Drug, latex or other allergies')}
-          {field('major_surgeries', 'Major surgeries / hospitalisations', true, 'Include dates when relevant')}
+          <label className="clinical-input-field"><span className="field-label">Weight <span className="input-unit">kg</span></span><input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)}  /></label>
+          {field('blood_pressure', 'Blood pressure')}
+          {field('current_medications', 'Current medications', true)}
+          {field('illness_history', 'History of illnesses', true)}
+          {field('allergies', 'Allergies', true)}
+          {field('major_surgeries', 'Major surgeries / hospitalisations', true)}
         </div>
       </section>
 
@@ -546,8 +546,8 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <ClipboardList size={19} />
         </div>
         <div className="form-grid">
-          {field('chief_complaint', 'Chief complaint', true, 'What brought the patient in today?')}
-          {field('history_present_illness', 'History of present illness', true, 'Onset, duration, severity, triggers and relevant past episodes')}
+          {field('chief_complaint', 'Chief complaint', true)}
+          {field('history_present_illness', 'History of present illness', true)}
         </div>
       </section>
 
@@ -557,10 +557,10 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <FileText size={19} />
         </div>
         <div className="form-grid two clinical-assessment-grid">
-          {suggestionField('investigations_advised', 'Investigations advised', investigationOptions, 'Add an investigation…', 'Selected investigations and notes')}
-          {suggestionField('clinical_findings', 'Clinical findings', dentalFindings, 'Add a finding…', 'Selected findings and examination notes')}
-          {field('primary_diagnosis', 'Primary diagnosis', true, 'Working diagnosis at this visit')}
-          {field('final_diagnosis', 'Final diagnosis', true, 'Update once all investigations are reviewed')}
+          {suggestionField('investigations_advised', 'Investigations advised', investigationOptions, 'Add an investigation…')}
+          {suggestionField('clinical_findings', 'Clinical findings', dentalFindings, 'Add a finding…')}
+          {field('primary_diagnosis', 'Primary diagnosis', true)}
+          {field('final_diagnosis', 'Final diagnosis', true)}
         </div>
       </section>
 
