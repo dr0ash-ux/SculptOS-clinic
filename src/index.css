@@ -27,3 +27,55 @@ html:has(.login),body:has(.login),#root:has(.login){width:100%;min-width:100%;mi
 
 /* Patient registry and standalone clinical file */
 .registry-panel{width:100%}.registry-headings{display:grid;grid-template-columns:repeat(3,minmax(130px,1fr));gap:22px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em}.registry-row{grid-template-columns:minmax(220px,1.35fr) minmax(130px,.75fr) minmax(150px,.8fr) minmax(125px,.6fr) auto}.registry-item{display:flex;flex-direction:column;gap:4px;min-width:0;text-align:left}.registry-item b{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.registry-item span{color:var(--muted);font-size:11px}.patient-file-page{max-width:1120px}.patient-file-page .clinical-file{width:100%;box-sizing:border-box}.field-help{display:block;margin-top:5px;color:var(--muted);font-size:11px}@media(max-width:1050px){.registry-headings{display:none}.registry-row{grid-template-columns:minmax(200px,1.2fr) repeat(2,minmax(120px,.7fr)) auto}.registry-row .registry-item:nth-of-type(3){display:none}}@media(max-width:700px){.registry-row{grid-template-columns:1fr auto;gap:10px}.registry-row .registry-item{display:none}.registry-row .patient-name{grid-column:1}.registry-row>svg{grid-column:2;grid-row:1}.patient-file-page{max-width:none}}
+
+
+/* Redesigned clinical patient file */
+.patient-file-page{max-width:1320px;margin:0 auto}
+.clinical-file-shell{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px;align-items:start;width:100%}
+.clinical-sidebar{position:sticky;top:18px;display:grid;gap:12px;padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow)}
+.clinical-patient-card{display:flex;gap:11px;align-items:center;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.clinical-patient-card .avatar{flex:none}
+.clinical-patient-card h3{margin:2px 0 3px;font:700 15px Manrope}
+.clinical-patient-card p{margin:0;color:var(--muted);font-size:11px;line-height:1.45}
+.clinical-snapshot{display:grid;gap:10px}
+.clinical-snapshot>div{display:flex;flex-direction:column;gap:3px}
+.clinical-snapshot span{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.clinical-snapshot strong{overflow:hidden;color:var(--text);font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.clinical-risk{padding:12px;border-radius:12px;background:var(--surface2)}
+.clinical-risk .eyebrow{font-size:9px}
+.clinical-risk p,.clinical-risk ul{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+.clinical-risk ul{padding-left:17px;color:#a76037}
+.clinical-nav{display:grid;gap:3px;padding-top:2px;border-top:1px solid var(--line)}
+.clinical-nav button{display:grid;grid-template-columns:25px minmax(0,1fr) 16px;align-items:center;gap:5px;width:100%;padding:9px 7px;border-radius:9px;background:transparent;color:var(--muted);font-size:11px;text-align:left}
+.clinical-nav button:hover{background:var(--surface2);color:var(--text)}
+.clinical-nav button span{color:var(--accent2);font:700 10px Manrope}
+.clinical-file-form{min-width:0}
+.clinical-file-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 16px;padding:4px 2px}
+.clinical-file-intro h2{margin:3px 0 5px;font:700 27px Manrope;letter-spacing:-.045em}
+.clinical-file-intro p{max-width:520px;margin:0;color:var(--muted);font-size:13px}
+.clinical-progress{display:flex;align-items:center;flex:none;gap:4px;padding:5px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
+.clinical-progress span{padding:6px 8px;border-radius:7px;color:var(--muted);font-size:10px}
+.clinical-progress .done{color:var(--accent2)}
+.clinical-progress .active{background:var(--surface2);color:var(--text);font-weight:700}
+.clinical-section{scroll-margin-top:18px;margin-bottom:14px;padding:21px;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow)}
+.clinical-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px}
+.clinical-section-head>div{display:flex;gap:11px;align-items:flex-start}
+.clinical-section-head>svg{margin-top:4px;color:var(--accent2)}
+.section-number{display:grid;place-items:center;width:27px;height:27px;border-radius:9px;background:var(--surface2);color:var(--accent2);font:700 10px Manrope}
+.clinical-section h3{margin:0 0 2px;font:700 15px Manrope}
+.clinical-section p{margin:0;color:var(--muted);font-size:11px}
+.clinical-section label{font-size:12px;font-weight:600}
+.clinical-section label .input-unit{margin-left:3px;color:var(--muted);font-weight:400}
+.clinical-section input,.clinical-section textarea,.clinical-section select{margin-top:7px;border-radius:10px;background:var(--surface)}
+.clinical-section textarea{min-height:92px;line-height:1.45;resize:vertical}
+.clinical-section .clinical-select{margin:7px 0 0}
+.clinical-section .clinical-select select{margin:0;color:var(--text);font-size:12px}
+.clinical-action-bar{position:sticky;bottom:14px;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:2px;padding:13px 14px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--surface) 92%,transparent);box-shadow:0 14px 30px rgba(20,36,32,.12);backdrop-filter:blur(10px)}
+.clinical-action-bar>div:first-child{display:grid;gap:2px}
+.clinical-action-bar strong{font:700 12px Manrope}
+.clinical-action-bar span{color:var(--muted);font-size:11px}
+.clinical-action-bar>div:last-child{display:flex;align-items:center;gap:9px}
+.clinical-action-bar .ghost,.clinical-action-bar .primary{height:38px;padding:0 13px;font-size:12px}
+@media(max-width:960px){.patient-file-page{max-width:none}.clinical-file-shell{grid-template-columns:1fr}.clinical-sidebar{position:static;grid-template-columns:1.2fr repeat(2,1fr);align-items:start}.clinical-patient-card{padding:0;border:0}.clinical-risk{display:none}.clinical-nav{display:flex;gap:4px;padding:0;border:0}.clinical-nav button{grid-template-columns:22px 1fr;padding:8px}.clinical-nav button svg{display:none}.clinical-file-intro{margin-top:4px}}
+@media(max-width:650px){.clinical-sidebar{grid-template-columns:1fr;gap:11px}.clinical-snapshot{grid-template-columns:repeat(3,minmax(0,1fr))}.clinical-nav{overflow:auto}.clinical-nav button{min-width:138px}.clinical-file-intro{align-items:flex-start;flex-direction:column}.clinical-progress{width:100%}.clinical-progress span{flex:1;text-align:center}.clinical-section{padding:16px;border-radius:15px}.clinical-action-bar{align-items:stretch;flex-direction:column;bottom:8px}.clinical-action-bar>div:last-child{display:grid;grid-template-columns:1fr 1fr}.clinical-action-bar button{width:100%}}
+@media(max-width:440px){.clinical-snapshot{grid-template-columns:1fr}.clinical-action-bar>div:last-child{grid-template-columns:1fr}.clinical-action-bar .ghost{display:none}}
