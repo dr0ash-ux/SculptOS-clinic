@@ -479,7 +479,8 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
   const [brightness, setBrightness] = useState(100)
   const [contrast, setContrast] = useState(100)
   const [invert, setInvert] = useState(false)
-  const [lens, setLens] = useState({ visible: false, x: 50, y: 50 })
+  const [lens, setLens] = useState({ visible: false, left: 0, top: 0, x: 50, y: 50, width: 0, height: 0 })
+  const imageElementRef = useRef<HTMLImageElement>(null)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [reviewed, setReviewed] = useState<Record<string, boolean>>({})
   const previewable = asset.mime_type?.startsWith('image/') || asset.mime_type === 'application/pdf'
@@ -495,8 +496,23 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
     ['anatomy', 'Anatomy & pathology', 'Sinus, condyles, canal and incidental findings'],
   ] as const
   const updateLens = (event: any) => {
-    const bounds = event.currentTarget.getBoundingClientRect()
-    setLens({ visible: true, x: Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)), y: Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)) })
+    const stage = event.currentTarget.getBoundingClientRect()
+    const image = imageElementRef.current
+    if (!image?.naturalWidth || !image?.naturalHeight) return
+    const imageRatio = image.naturalWidth / image.naturalHeight
+    const stageRatio = stage.width / stage.height
+    const baseWidth = imageRatio > stageRatio ? stage.width : stage.height * imageRatio
+    const baseHeight = imageRatio > stageRatio ? stage.width / imageRatio : stage.height
+    const renderedWidth = baseWidth * zoom
+    const renderedHeight = baseHeight * zoom
+    const imageLeft = (stage.width - renderedWidth) / 2
+    const imageTop = (stage.height - renderedHeight) / 2
+    const left = event.clientX - stage.left
+    const top = event.clientY - stage.top
+    const x = (left - imageLeft) / renderedWidth
+    const y = (top - imageTop) / renderedHeight
+    if (x < 0 || x > 1 || y < 0 || y > 1) { setLens(current => ({ ...current, visible: false })); return }
+    setLens({ visible: true, left, top, x, y, width: renderedWidth, height: renderedHeight })
   }
 
   useEffect(() => {
@@ -542,8 +558,8 @@ function ImagingViewerPage({ patient, asset, onBack }: { patient: Patient; asset
             <button type="button" className="primary opg-analyse" onClick={() => setAnalysisOpen(value => !value)}>{analysisOpen ? 'Hide analysis' : 'Analyse OPG'}</button>
           </div>
           <div className="opg-reader-stage" onMouseMove={updateLens} onMouseLeave={() => setLens(value => ({ ...value, visible: false }))}>
-            <img src={url} alt={asset.file_name} style={{ filter: imageFilter, transform: `scale(${zoom})` }} />
-            {lens.visible && <div className="opg-magnifier" aria-hidden="true" style={{ left: `${lens.x}%`, top: `${lens.y}%`, backgroundImage: `url("${url}")`, backgroundPosition: `${lens.x}% ${lens.y}%`, backgroundSize: `${Math.round(zoom * 420)}%`, filter: imageFilter }} />}
+            <img ref={imageElementRef} src={url} alt={asset.file_name} style={{ filter: imageFilter, transform: `scale(${zoom})` }} />
+            {lens.visible && <div className="opg-magnifier" aria-hidden="true" style={{ left: lens.left, top: lens.top, backgroundImage: `url("${url}")`, backgroundPosition: `${82 - lens.x * lens.width * 3.5}px ${82 - lens.y * lens.height * 3.5}px`, backgroundSize: `${lens.width * 3.5}px ${lens.height * 3.5}px`, filter: imageFilter }} />}
             <span className="opg-lens-tip">Move over the OPG to inspect with the magnifier</span>
           </div>
           {analysisOpen && <section className="opg-analysis-panel">
@@ -615,9 +631,9 @@ function ImagingLibrary({ patient, onOpenImaging }: { patient: Patient; onOpenIm
       </button>)}
     </div>
     <div className="imaging-upload-row">
-      <div><strong>Add {labelFor(assetType)}</strong><span>JPG, PNG, PDF, DICOM or STL · up to 25 MB</span></div>
+      <div><strong>Add {labelFor(assetType)}</strong><span>JPG, PNG, TIFF, PDF, DICOM or STL · up to 25 MB</span></div>
       <button type="button" className="primary" onClick={() => fileInputRef.current?.click()} disabled={uploading}>{uploading ? 'Uploading…' : 'Upload file'}</button>
-      <input ref={fileInputRef} type="file" className="visually-hidden" accept="image/jpeg,image/png,application/pdf,.dcm,.dicom,.stl" onChange={event => { void uploadFile(event.target.files?.[0]); event.target.value = '' }} />
+      <input ref={fileInputRef} type="file" className="visually-hidden" accept="image/jpeg,image/png,image/tiff,application/pdf,.tif,.tiff,.dcm,.dicom,.stl" onChange={event => { void uploadFile(event.target.files?.[0]); event.target.value = '' }} />
     </div>
     <label className="imaging-note"><span className="field-label">Image note <em>optional</em></span><input value={note} onChange={event => setNote(event.target.value)} placeholder="e.g. Pre-operative OPG from external radiology centre" /></label>
     {message && <p className="imaging-message">{message}</p>}
