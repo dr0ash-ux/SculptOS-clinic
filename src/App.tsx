@@ -467,9 +467,9 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
     setAddingCustom(current => ({ ...current, [key]: false }))
   }
   const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  const field = (key: keyof typeof values, label: string, area = false, placeholder = '') => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />}</label>
+  const field = (key: keyof typeof values, label: string, area = false, placeholder = '') => <label><span className="field-label">{label}</span>{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />}</label>
   const suggestionField = (key: 'investigations_advised' | 'clinical_findings', label: string, options: string[], customLabel: string, placeholder: string) => <label className="clinical-suggestion-field">
-    <span>{label}</span>
+    <span className="field-label">{label}</span>
     <select value="" onChange={event => {
       const choice = event.target.value
       if (choice === '__custom__') setAddingCustom(current => ({ ...current, [key]: true }))
@@ -530,7 +530,7 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <Activity size={19} />
         </div>
         <div className="form-grid two">
-          <label>Weight <span className="input-unit">kg</span><input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)} placeholder="e.g. 62" /></label>
+          <label className="clinical-input-field"><span className="field-label">Weight <span className="input-unit">kg</span></span><input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)} placeholder="e.g. 62" /></label>
           {field('blood_pressure', 'Blood pressure', false, 'e.g. 120/80 mmHg')}
           {field('current_medications', 'Current medications', true, 'Name, dose and frequency — or “None reported”')}
           {field('illness_history', 'History of illnesses', true, 'Diabetes, hypertension, cardiac conditions, etc.')}
@@ -569,10 +569,10 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           <CalendarDays size={19} />
         </div>
         <div className="form-grid two">
-          <label>Next follow-up date<input type="date" value={values.next_follow_up_date} onChange={event => set('next_follow_up_date', event.target.value)} /></label>
-          <label>Patient group / scheme<select value={values.payer_group} onChange={event => set('payer_group', event.target.value)}>{payerGroups.map(group => <option key={group}>{group}</option>)}</select></label>
-          <label>Missed appointments<input type="number" min="0" value={values.missed_appointments} onChange={event => set('missed_appointments', event.target.value)} /></label>
-          <label>Reminder attempts<input type="number" min="0" value={values.reminder_count} onChange={event => set('reminder_count', event.target.value)} /><span className="field-help">Calls or AI-bot reminders logged by reception.</span></label>
+          <label><span className="field-label">Next follow-up date</span><input type="date" value={values.next_follow_up_date} onChange={event => set('next_follow_up_date', event.target.value)} /></label>
+          <label><span className="field-label">Patient group / scheme</span><select value={values.payer_group} onChange={event => set('payer_group', event.target.value)}>{payerGroups.map(group => <option key={group}>{group}</option>)}</select></label>
+          <label><span className="field-label">Missed appointments</span><input type="number" min="0" value={values.missed_appointments} onChange={event => set('missed_appointments', event.target.value)} /></label>
+          <label><span className="field-label">Reminder attempts</span><input type="number" min="0" value={values.reminder_count} onChange={event => set('reminder_count', event.target.value)} /><span className="field-help">Calls or AI-bot reminders logged by reception.</span></label>
         </div>
       </section>
 
