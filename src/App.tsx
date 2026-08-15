@@ -457,10 +457,115 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
   const [saving, setSaving] = useState(false)
   const set = (key: string, value: string) => setValues(current => ({ ...current, [key]: value }))
   const addOption = (key: 'investigations_advised' | 'clinical_findings', choice: string) => { if (!choice) return; set(key, values[key] ? `${values[key]}; ${choice}` : choice) }
-  const field = (key: keyof typeof values, label: string, area = false) => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} />}</label>
-  return <div className="panel clinical-file"><div className="detail-head"><div className="avatar large">{initials(patientName(patient))}</div><div><span className="eyebrow">CLINICAL FILE</span><h3>{patientName(patient)}</h3><span>{patient.patient_number} · {ageFromDob(patient.date_of_birth || '') || '—'} years · {patient.sex || '—'}</span></div></div><div className="detail-meta"><span>{patient.phone || 'No phone'}</span><span>{patient.location || 'Address not added'}</span><span>{patient.occupation || 'Occupation not added'}</span></div><form onSubmit={async event => { event.preventDefault(); setSaving(true); await onSave(patient.id, values); setSaving(false) }}><div className="file-section"><h4>Vitals & medical history</h4><div className="form-grid two"><label>Weight (kg)<input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)} /></label>{field('blood_pressure', 'Blood pressure')}{field('current_medications', 'Current medications', true)}{field('illness_history', 'History of illnesses', true)}{field('allergies', 'Allergies', true)}{field('major_surgeries', 'Major surgeries / hospitalisations', true)}</div></div><div className="file-section"><h4>Presenting problem</h4><div className="form-grid">{field('chief_complaint', 'Chief complaint', true)}{field('history_present_illness', 'History of present illness', true)}</div></div><div className="file-section"><h4>Clinical assessment</h4><div className="form-grid"><label>Investigations advised<div className="clinical-select"><select defaultValue="" onChange={event => { addOption('investigations_advised', event.target.value); event.currentTarget.value = '' }}><option value="">Add investigation…</option>{investigationOptions.map(option => <option key={option}>{option}</option>)}</select></div><textarea value={values.investigations_advised} onChange={event => set('investigations_advised', event.target.value)} placeholder="Select investigations or add a specific request…" /></label><label>Clinical findings<div className="clinical-select"><select defaultValue="" onChange={event => { addOption('clinical_findings', event.target.value); event.currentTarget.value = '' }}><option value="">Add clinical finding…</option>{dentalFindings.map(option => <option key={option}>{option}</option>)}</select></div><textarea value={values.clinical_findings} onChange={event => set('clinical_findings', event.target.value)} placeholder="Select findings or write detailed examination notes…" /></label>{field('primary_diagnosis', 'Primary diagnosis', true)}{field('final_diagnosis', 'Final diagnosis', true)}</div></div><div className="file-section"><h4>Follow-up & engagement</h4><div className="form-grid two"><label>Next follow-up date<input type="date" value={values.next_follow_up_date} onChange={event => set('next_follow_up_date', event.target.value)} /></label><label>Patient group / scheme<select value={values.payer_group} onChange={event => set('payer_group', event.target.value)}>{payerGroups.map(group => <option key={group}>{group}</option>)}</select></label><label>Missed appointments<input type="number" min="0" value={values.missed_appointments} onChange={event => set('missed_appointments', event.target.value)} /></label><label>Reminder attempts<input type="number" min="0" value={values.reminder_count} onChange={event => set('reminder_count', event.target.value)} /><span className="field-help">Calls or AI-bot reminders logged by reception.</span></label></div></div><div className="clinical-file-actions"><button type="button" className="ghost" onClick={onBook}><CalendarDays size={16} /> Book follow-up</button><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div></form></div>
-}
+  const jumpTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const field = (key: keyof typeof values, label: string, area = false, placeholder = '') => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} placeholder={placeholder} />}</label>
+  const followUp = values.next_follow_up_date ? new Date(`${values.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'
+  const risks = [values.allergies && 'Allergies recorded', values.illness_history && 'Medical history recorded', values.current_medications && 'Medication review needed'].filter(Boolean) as string[]
 
+  return <div className="clinical-file-shell">
+    <aside className="clinical-sidebar">
+      <div className="clinical-patient-card">
+        <div className="avatar large">{initials(patientName(patient))}</div>
+        <div>
+          <span className="eyebrow">PATIENT FILE</span>
+          <h3>{patientName(patient)}</h3>
+          <p>{patient.patient_number} · {ageFromDob(patient.date_of_birth || '') || '—'} years · {patient.sex || '—'}</p>
+        </div>
+      </div>
+      <div className="clinical-snapshot">
+        <div><span>Phone</span><strong>{patient.phone || 'Not added'}</strong></div>
+        <div><span>Scheme</span><strong>{values.payer_group || 'Self-pay'}</strong></div>
+        <div><span>Next follow-up</span><strong>{followUp}</strong></div>
+      </div>
+      <div className="clinical-risk">
+        <span className="eyebrow">SAFETY CHECK</span>
+        {risks.length ? <ul>{risks.map(risk => <li key={risk}>{risk}</li>)}</ul> : <p>No allergies, illnesses or medications recorded yet.</p>}
+      </div>
+      <nav className="clinical-nav" aria-label="Clinical file sections">
+        <button type="button" onClick={() => jumpTo('medical-screening')}><span>01</span>Medical screening<ChevronRight size={15} /></button>
+        <button type="button" onClick={() => jumpTo('presenting-problem')}><span>02</span>Complaint & history<ChevronRight size={15} /></button>
+        <button type="button" onClick={() => jumpTo('clinical-assessment')}><span>03</span>Assessment<ChevronRight size={15} /></button>
+        <button type="button" onClick={() => jumpTo('care-coordination')}><span>04</span>Follow-up<ChevronRight size={15} /></button>
+      </nav>
+    </aside>
+
+    <form className="clinical-file-form" onSubmit={async event => { event.preventDefault(); setSaving(true); await onSave(patient.id, values); setSaving(false) }}>
+      <div className="clinical-file-intro">
+        <div>
+          <span className="eyebrow">TODAY'S CONSULTATION</span>
+          <h2>Clinical assessment</h2>
+          <p>Capture the essential history, examination and plan in the order of a real consultation.</p>
+        </div>
+        <div className="clinical-progress" aria-label="Clinical file workflow">
+          <span className="done">Reception</span><span className="active">Assessment</span><span>Plan</span>
+        </div>
+      </div>
+
+      <section className="clinical-section" id="medical-screening">
+        <div className="clinical-section-head">
+          <div><span className="section-number">01</span><div><h3>Medical screening</h3><p>Record information that may affect dental care.</p></div></div>
+          <Activity size={19} />
+        </div>
+        <div className="form-grid two">
+          <label>Weight <span className="input-unit">kg</span><input inputMode="decimal" value={values.weight_kg} onChange={event => set('weight_kg', event.target.value)} placeholder="e.g. 62" /></label>
+          {field('blood_pressure', 'Blood pressure', false, 'e.g. 120/80 mmHg')}
+          {field('current_medications', 'Current medications', true, 'Name, dose and frequency — or “None reported”')}
+          {field('illness_history', 'History of illnesses', true, 'Diabetes, hypertension, cardiac conditions, etc.')}
+          {field('allergies', 'Allergies', true, 'Drug, latex or other allergies')}
+          {field('major_surgeries', 'Major surgeries / hospitalisations', true, 'Include dates when relevant')}
+        </div>
+      </section>
+
+      <section className="clinical-section" id="presenting-problem">
+        <div className="clinical-section-head">
+          <div><span className="section-number">02</span><div><h3>Complaint & history</h3><p>Start with the patient’s own words, then add the clinical story.</p></div></div>
+          <ClipboardList size={19} />
+        </div>
+        <div className="form-grid">
+          {field('chief_complaint', 'Chief complaint', true, 'What brought the patient in today?')}
+          {field('history_present_illness', 'History of present illness', true, 'Onset, duration, severity, triggers and relevant past episodes')}
+        </div>
+      </section>
+
+      <section className="clinical-section" id="clinical-assessment">
+        <div className="clinical-section-head">
+          <div><span className="section-number">03</span><div><h3>Assessment</h3><p>Document your examination, imaging requests and working diagnosis.</p></div></div>
+          <FileText size={19} />
+        </div>
+        <div className="form-grid">
+          <label>Investigations advised
+            <div className="clinical-select"><select defaultValue="" onChange={event => { addOption('investigations_advised', event.target.value); event.currentTarget.value = '' }}><option value="">Choose a suggested investigation…</option>{investigationOptions.map(option => <option key={option}>{option}</option>)}</select></div>
+            <textarea value={values.investigations_advised} onChange={event => set('investigations_advised', event.target.value)} placeholder="Selected investigations appear here. Add any specific views or requests." />
+          </label>
+          <label>Clinical findings
+            <div className="clinical-select"><select defaultValue="" onChange={event => { addOption('clinical_findings', event.target.value); event.currentTarget.value = '' }}><option value="">Choose a suggested finding…</option>{dentalFindings.map(option => <option key={option}>{option}</option>)}</select></div>
+            <textarea value={values.clinical_findings} onChange={event => set('clinical_findings', event.target.value)} placeholder="Selected findings appear here. Add detailed examination notes." />
+          </label>
+          {field('primary_diagnosis', 'Primary diagnosis', true, 'Working diagnosis at this visit')}
+          {field('final_diagnosis', 'Final diagnosis', true, 'Update once all investigations are reviewed')}
+        </div>
+      </section>
+
+      <section className="clinical-section" id="care-coordination">
+        <div className="clinical-section-head">
+          <div><span className="section-number">04</span><div><h3>Follow-up & engagement</h3><p>Keep the care plan and reception follow-through visible.</p></div></div>
+          <CalendarDays size={19} />
+        </div>
+        <div className="form-grid two">
+          <label>Next follow-up date<input type="date" value={values.next_follow_up_date} onChange={event => set('next_follow_up_date', event.target.value)} /></label>
+          <label>Patient group / scheme<select value={values.payer_group} onChange={event => set('payer_group', event.target.value)}>{payerGroups.map(group => <option key={group}>{group}</option>)}</select></label>
+          <label>Missed appointments<input type="number" min="0" value={values.missed_appointments} onChange={event => set('missed_appointments', event.target.value)} /></label>
+          <label>Reminder attempts<input type="number" min="0" value={values.reminder_count} onChange={event => set('reminder_count', event.target.value)} /><span className="field-help">Calls or AI-bot reminders logged by reception.</span></label>
+        </div>
+      </section>
+
+      <div className="clinical-action-bar">
+        <div><strong>Ready to continue?</strong><span>Save this assessment before creating the next appointment.</span></div>
+        <div><button type="button" className="ghost" onClick={onBook}><CalendarDays size={16} /> Book follow-up</button><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
+      </div>
+    </form>
+  </div>
+}
 const smartSuggestions: Record<string, string[]> = {
   'chief_complaint': ['Tooth pain', 'Swelling in gums or face', 'Broken tooth or filling', 'Bleeding gums', 'Bad breath', 'Sensitivity to hot or cold', 'Food getting stuck', 'Crooked teeth', 'Gap between teeth', 'Cheek bite', 'Difficulty opening mouth', 'Jaw pain or clicking', 'Missing tooth', 'Loose tooth', 'Mouth ulcer or sore', 'Routine check-up'],
   'medical_history': ['No known medical condition', 'Diabetes', 'High blood pressure', 'Heart condition', 'Thyroid condition', 'Asthma', 'Pregnancy', 'Blood thinner medication', 'Allergy to medicines', 'Previous surgery or hospitalisation'],
