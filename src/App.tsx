@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/supabase'
 import { AdminPage, Practitioner } from './AdminPage'
+import { TreatmentPlan } from './TreatmentPlan'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -375,7 +376,7 @@ export default function App() {
         {view === 'appointments' && <section className="appointments-page"><Hero showHeader eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler doctors={activeDoctors} weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
         {view === 'booking' && appointmentSlot && <BookingPage doctors={activeDoctors} slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} onOpenFile={patientId => { setSelectedPatientId(patientId); setView('patient_file') }} onNew={() => setPatientModalOpen(true)} />}
-        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImagingPage={() => setView('patient_imaging')} />}
+        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} workspace={workspace} onNotice={setNotice} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImagingPage={() => setView('patient_imaging')} />}
         {view === 'patient_imaging' && selectedPatient && <PatientImagingPage patient={selectedPatient} onBack={() => setView('patient_file')} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} onOpenCbctUpload={() => setView('cbct_upload')} />}
         {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_imaging')} />}
         {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
@@ -490,8 +491,8 @@ function PatientsPage({ patients, onOpenFile, onNew }: { patients: Patient[]; on
   return <section><Hero showHeader eyebrow="PATIENTS" title="Patient management" copy="A branch-wide registry for follow-ups, reminders and clinical records." action={<button className="primary" onClick={onNew}><Plus size={16} /> New patient</button>} /><div className="panel patient-panel registry-panel"><div className="filter-row"><div><b>{patients.length} patients</b><span>Click a patient to open their full clinical file.</span></div><div className="registry-headings"><span>Follow-up</span><span>Scheme / group</span><span>Engagement</span></div></div>{patients.length ? patients.map(patient => <button className="patient-row registry-row" key={patient.id} onClick={() => onOpenFile(patient.id)}><div className="patient-name"><div className="avatar">{initials(patientName(patient))}</div><div><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone saved'}</span></div></div><div className="registry-item"><b>{patient.next_follow_up_date ? new Date(`${patient.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'}</b><span>{patient.missed_appointments} missed appointment{patient.missed_appointments === 1 ? '' : 's'}</span></div><div className="registry-item"><b>{patient.payer_group || 'Self-pay'}</b><span>{patient.primary_diagnosis || 'No diagnosis recorded'}</span></div><div className="registry-item"><b>{patient.reminder_count} reminder{patient.reminder_count === 1 ? '' : 's'}</b><span>Calls / bot attempts</span></div><ChevronRight size={16} /></button>) : <EmptyState label="No patient records yet. Add your first patient to begin the clinic workflow." />}</div></section>
 }
 
-function PatientFilePage({ patient, onBack, onSave, onBook, onOpenImagingPage }: { patient: Patient; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImagingPage: () => void }) {
-  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<div className="file-page-actions"><button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button><button className="primary" onClick={onOpenImagingPage}>Open imaging</button></div>} /><ClinicalFile patient={patient} onSave={onSave} onBook={onBook} /></section>
+function PatientFilePage({ patient, workspace, onNotice, onBack, onSave, onBook, onOpenImagingPage }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImagingPage: () => void }) {
+  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<div className="file-page-actions"><button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button><button className="primary" onClick={onOpenImagingPage}>Open imaging</button></div>} /><ClinicalFile patient={patient} workspace={workspace} onNotice={onNotice} onSave={onSave} onBook={onBook} /></section>
 }
 
 function PatientImagingPage({ patient, onBack, onOpenImaging, onOpenCbctUpload }: { patient: Patient; onBack: () => void; onOpenImaging: (asset: ImagingAsset) => void; onOpenCbctUpload: () => void }) {
@@ -726,7 +727,7 @@ function ImagingLibrary({ patient, onOpenImaging, onOpenCbctUpload }: { patient:
   </div>
 }
 
-function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
+function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
   const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '', next_follow_up_date: patient.next_follow_up_date || '', payer_group: patient.payer_group || 'Self-pay', missed_appointments: String(patient.missed_appointments || 0), reminder_count: String(patient.reminder_count || 0) })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
@@ -837,6 +838,8 @@ function ClinicalFile({ patient, onSave, onBook }: { patient: Patient; onSave: (
           {field('final_diagnosis', 'Final diagnosis', true)}
         </div>
       </section>
+
+      <TreatmentPlan patient={patient} workspace={workspace} onNotice={onNotice} />
 
       <section className="clinical-section" id="care-coordination">
         <div className="clinical-section-head">
