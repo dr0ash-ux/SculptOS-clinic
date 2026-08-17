@@ -32,36 +32,6 @@ returns boolean language sql stable security definer set search_path = public as
   );
 $$;
 
-create table public.treatment_catalogue (
-  id uuid primary key default gen_random_uuid(),
-  clinic_id uuid not null references public.clinics(id) on delete cascade,
-  name text not null,
-  procedure_code text,
-  category text not null default 'General',
-  standard_price numeric(12,2) not null default 0 check (standard_price >= 0),
-  active boolean not null default true,
-  created_by uuid references auth.users(id) on delete set null,
-  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
-  unique (clinic_id, name)
-);
-create table public.treatment_price_audit (
-  id bigint generated always as identity primary key, clinic_id uuid not null references public.clinics(id) on delete cascade,
-  treatment_catalogue_id uuid not null references public.treatment_catalogue(id) on delete cascade,
-  old_price numeric(12,2), new_price numeric(12,2) not null, changed_by uuid references auth.users(id) on delete set null,
-  changed_at timestamptz not null default now()
-);
-create table public.treatment_plans (
-  id uuid primary key default gen_random_uuid(), clinic_id uuid not null references public.clinics(id) on delete restrict,
-  patient_id uuid not null references public.patients(id) on delete restrict, status text not null default 'draft',
-  created_by uuid references auth.users(id) on delete set null, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
-);
-create table public.treatment_plan_items (
-  id uuid primary key default gen_random_uuid(), treatment_plan_id uuid not null references public.treatment_plans(id) on delete cascade,
-  treatment_catalogue_id uuid references public.treatment_catalogue(id) on delete set null,
-  treatment_name text not null, price_snapshot numeric(12,2) not null check (price_snapshot >= 0),
-  discount_amount numeric(12,2) not null default 0 check (discount_amount >= 0 and discount_amount <= price_snapshot),
-  created_at timestamptz not null default now(), updated_at timestamptz not null default now()
-);
 
 create table public.finance_categories (
   id uuid primary key default gen_random_uuid(), clinic_id uuid references public.clinics(id) on delete cascade,
@@ -75,7 +45,7 @@ create table public.financial_transactions (
   amount numeric(12,2) not null check (amount > 0), payment_method text check (payment_method in ('cash','card','upi','bank_transfer','other')),
   status text not null default 'recorded' check (status in ('recorded','pending','void')),
   note text, patient_id uuid references public.patients(id) on delete restrict,
-  treatment_plan_item_id uuid references public.treatment_plan_items(id) on delete restrict,
+  treatment_plan_item_id uuid references public.patient_treatment_items(id) on delete restrict,
   inventory_purchase_id uuid, staff_id uuid references auth.users(id) on delete restrict,
   created_by uuid references auth.users(id) on delete set null, created_at timestamptz not null default now(),
   updated_by uuid references auth.users(id) on delete set null, updated_at timestamptz not null default now(),
@@ -110,23 +80,15 @@ create table public.inventory_stock_movements (
   movement_type text not null check (movement_type in ('purchase','usage','wastage','adjustment','return')),
   quantity numeric(12,3) not null check (quantity <> 0), unit_cost_snapshot numeric(12,2) not null default 0 check (unit_cost_snapshot >= 0),
   total_value numeric(12,2) generated always as (abs(quantity) * unit_cost_snapshot) stored, movement_date date not null default current_date,
-  reason text, patient_id uuid references public.patients(id) on delete restrict, treatment_plan_item_id uuid references public.treatment_plan_items(id) on delete restrict,
+  reason text, patient_id uuid references public.patients(id) on delete restrict, treatment_plan_item_id uuid references public.patient_treatment_items(id) on delete restrict,
   created_by uuid references auth.users(id) on delete set null, created_at timestamptz not null default now()
 );
 
-create index treatment_catalogue_clinic_active_idx on public.treatment_catalogue(clinic_id, active);
 create index financial_transactions_clinic_date_idx on public.financial_transactions(clinic_id, transaction_date desc);
 create index financial_transactions_plan_item_idx on public.financial_transactions(treatment_plan_item_id) where treatment_plan_item_id is not null;
 create index inventory_items_clinic_active_idx on public.inventory_items(clinic_id, active);
 create index inventory_movements_item_date_idx on public.inventory_stock_movements(item_id, movement_date desc);
 
-create or replace function public.snapshot_treatment_price() returns trigger language plpgsql set search_path = public as $$
-begin
-  if new.price_snapshot is null then select standard_price into new.price_snapshot from public.treatment_catalogue where id = new.treatment_catalogue_id; end if;
-  if new.price_snapshot is null then raise exception 'A treatment-plan item requires a saved price snapshot'; end if;
-  return new;
-end; $$;
-create trigger treatment_plan_item_price_snapshot before insert on public.treatment_plan_items for each row execute procedure public.snapshot_treatment_price();
 create or replace function public.apply_inventory_movement() returns trigger language plpgsql set search_path = public as $$
 declare next_stock numeric(12,3); signed_quantity numeric(12,3);
 begin
@@ -138,9 +100,6 @@ begin
   return new;
 end; $$;
 create trigger inventory_movement_updates_stock before insert on public.inventory_stock_movements for each row execute procedure public.apply_inventory_movement();
-create or replace function public.audit_treatment_price() returns trigger language plpgsql security definer set search_path = public as $$ begin
- if tg_op = 'UPDATE' and old.standard_price is distinct from new.standard_price then insert into public.treatment_price_audit(clinic_id,treatment_catalogue_id,old_price,new_price,changed_by) values(new.clinic_id,new.id,old.standard_price,new.standard_price,auth.uid()); end if; return new; end; $$;
-create trigger treatment_catalogue_price_audit after update on public.treatment_catalogue for each row execute procedure public.audit_treatment_price();
 
 create or replace view public.monthly_finance_summary with (security_invoker = true) as
 select clinic_id, date_trunc('month', transaction_date)::date as month,
@@ -150,16 +109,9 @@ select clinic_id, date_trunc('month', transaction_date)::date as month,
 from public.financial_transactions group by clinic_id, date_trunc('month', transaction_date);
 
 alter table public.membership_permission_overrides enable row level security;
-alter table public.treatment_catalogue enable row level security; alter table public.treatment_price_audit enable row level security;
-alter table public.treatment_plans enable row level security; alter table public.treatment_plan_items enable row level security;
 alter table public.finance_categories enable row level security; alter table public.financial_transactions enable row level security; alter table public.staff_compensation enable row level security;
 alter table public.inventory_items enable row level security; alter table public.inventory_purchases enable row level security; alter table public.inventory_stock_movements enable row level security;
 create policy "admins manage finance inventory staff access" on public.membership_permission_overrides for all to authenticated using (exists(select 1 from public.memberships m where m.id=membership_id and public.has_clinic_permission(m.clinic_id,'finance.access.manage'))) with check (exists(select 1 from public.memberships m where m.id=membership_id and public.has_clinic_permission(m.clinic_id,'finance.access.manage')));
-create policy "clinical users view active catalogue" on public.treatment_catalogue for select to authenticated using (active and public.has_clinic_permission(clinic_id,'treatment_plans.write'));
-create policy "finance users manage catalogue" on public.treatment_catalogue for all to authenticated using (public.has_clinic_permission(clinic_id,'finance.view')) with check (public.has_clinic_permission(clinic_id,'finance.manage'));
-create policy "finance users view price history" on public.treatment_price_audit for select to authenticated using (public.has_clinic_permission(clinic_id,'finance.view'));
-create policy "clinical users access plans" on public.treatment_plans for all to authenticated using (public.has_clinic_permission(clinic_id,'treatment_plans.write')) with check (public.has_clinic_permission(clinic_id,'treatment_plans.write'));
-create policy "clinical users access plan items" on public.treatment_plan_items for all to authenticated using (exists(select 1 from public.treatment_plans p where p.id=treatment_plan_id and public.has_clinic_permission(p.clinic_id,'treatment_plans.write'))) with check (exists(select 1 from public.treatment_plans p where p.id=treatment_plan_id and public.has_clinic_permission(p.clinic_id,'treatment_plans.write')));
 create policy "finance users view categories" on public.finance_categories for select to authenticated using (clinic_id is null or public.has_clinic_permission(clinic_id,'finance.view'));
 create policy "finance managers manage categories" on public.finance_categories for all to authenticated using (clinic_id is not null and public.has_clinic_permission(clinic_id,'finance.manage')) with check (clinic_id is not null and public.has_clinic_permission(clinic_id,'finance.manage'));
 create policy "finance users manage transactions" on public.financial_transactions for all to authenticated using (public.has_clinic_permission(clinic_id,'finance.view')) with check (public.has_clinic_permission(clinic_id,'finance.manage'));
