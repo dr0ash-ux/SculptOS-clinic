@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FileText,
+  Activity, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText,
   LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
   UserRound, Users, WalletCards, X,
 } from 'lucide-react'
@@ -8,6 +8,8 @@ import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/s
 import { AdminPage, Practitioner } from './AdminPage'
 import { TreatmentPlan } from './TreatmentPlan'
 import { TreatmentPriceList } from './TreatmentPricing'
+import { InventoryPage } from './InventoryPage'
+import { FinancePage } from './FinancePage'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -19,12 +21,13 @@ type Patient = {
   sex: string | null; phone: string | null; email: string | null; location: string | null; occupation: string | null
   referral_source: string | null; chief_complaint: string | null; history_present_illness: string | null
   medical_history: string | null; clinical_findings: string | null; primary_diagnosis: string | null
-  final_diagnosis: string | null; treatment_advised: string | null; timeline_notes: string | null; weight_kg: number | null; blood_pressure: string | null; current_medications: string | null; illness_history: string | null; allergies: string | null; major_surgeries: string | null; investigations_advised: string | null; next_follow_up_date: string | null; payer_group: string | null; missed_appointments: number; reminder_count: number; status: string
+  final_diagnosis: string | null; treatment_advised: string | null; timeline_notes: string | null; weight_kg: number | null; blood_pressure: string | null; current_medications: string | null; illness_history: string | null; allergies: string | null; major_surgeries: string | null; investigations_advised: string | null; next_follow_up_date: string | null; payer_group: string | null; patient_group_id: string | null; missed_appointments: number; reminder_count: number; status: string
 }
 type Appointment = {
   id: string; patient_id: string; clinician_name: string; clinician_color: 'teal' | 'violet' | 'amber'
-  scheduled_at: string; duration_minutes: number; treatment_label: string; status: string; notes: string | null
+  scheduled_at: string; duration_minutes: number; treatment_label: string; status: string; notes: string | null; patient_group_id?: string | null
 }
+type PatientGroup = { id: string; name: string; sort_order: number; active: boolean }
 type ImagingAsset = {
   id: string; organization_id: string; clinic_id: string; patient_id: string
   asset_type: 'opg' | 'cbct' | 'intraoral_photo' | 'extraoral_photo' | 'document' | 'scan'
@@ -49,7 +52,7 @@ const timeLabels = Array.from({ length: 31 }, (_, index) => {
 const emptyPatient = {
   patient_title: '', first_name: '', last_name: '', date_of_birth: '', sex: '', phone: '', email: '', location: '', occupation: '',
   referral_source: '', chief_complaint: '', history_present_illness: '', medical_history: '', clinical_findings: '',
-  primary_diagnosis: '', final_diagnosis: '', treatment_advised: '', timeline_notes: '',
+  primary_diagnosis: '', final_diagnosis: '', treatment_advised: '', timeline_notes: '', payer_group: '', patient_group_id: '',
 }
 
 function startOfWeek(input: Date) {
@@ -73,6 +76,7 @@ function initials(name?: string | null) {
 function patientName(patient?: Patient) {
   return patient ? [patient.patient_title, patient.first_name, patient.last_name || ''].filter(Boolean).join(' ') : 'Unknown patient'
 }
+function patientGroupName(patient?: Patient) { return patient?.payer_group || 'Self Pay' }
 function formatShortDate(value: Date) {
   return value.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 }
@@ -97,6 +101,7 @@ export default function App() {
   const [email, setEmail] = useState('')
   const [patients, setPatients] = useState<Patient[]>([])
   const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [patientGroups, setPatientGroups] = useState<PatientGroup[]>([])
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -119,6 +124,17 @@ export default function App() {
       if (!mounted) return
       if (error) setNotice(error.message)
       else setPractitioners((data || []) as Practitioner[])
+    })
+    return () => { mounted = false }
+  }, [workspace?.clinicId])
+
+  useEffect(() => {
+    if (!workspace) return
+    let mounted = true
+    void supabase.from('patient_groups').select('id,name,sort_order,active').eq('clinic_id', workspace.clinicId).eq('active', true).order('sort_order').order('name').then(({ data, error }) => {
+      if (!mounted) return
+      if (error) setNotice(error.message)
+      else setPatientGroups((data || []) as PatientGroup[])
     })
     return () => { mounted = false }
   }, [workspace?.clinicId])
@@ -291,14 +307,14 @@ export default function App() {
     const patientNumber = `SC-${String(Date.now()).slice(-6)}`
     const { data: patientData, error: patientError } = await supabase.from('patients').insert({
       ...values, organization_id: workspace.organizationId, clinic_id: workspace.clinicId, created_by: user?.id,
-      patient_number: patientNumber, status: 'active', date_of_birth: values.date_of_birth || null, patient_title: values.patient_title || null,
+      patient_number: patientNumber, status: 'active', date_of_birth: values.date_of_birth || null, patient_title: values.patient_title || null, patient_group_id: values.patient_group_id || null, payer_group: values.payer_group || null,
     }).select().single()
     if (patientError || !patientData) { setNotice(patientError?.message || 'Could not create patient record.'); return }
     const patient = patientData as Patient
     const { data: appointmentData, error: appointmentError } = await supabase.from('appointments').insert({
       patient_id: patient.id, clinician_name: doctor.name, clinician_color: doctor.color,
       scheduled_at: appointmentSlot.date.toISOString(), duration_minutes: duration, treatment_label: treatment || 'Check-up',
-      status: 'confirmed', notes, organization_id: workspace.organizationId, clinic_id: workspace.clinicId, created_by: user?.id,
+      status: 'confirmed', notes, patient_group_id: values.patient_group_id || null, organization_id: workspace.organizationId, clinic_id: workspace.clinicId, created_by: user?.id,
     }).select().single()
     if (appointmentError) { setNotice(appointmentError.code === '23P01' ? 'This doctor is already booked for part of that time.' : appointmentError.message); return }
     setPatients(current => [patient, ...current])
@@ -308,7 +324,7 @@ export default function App() {
   }
   const saveClinicalFile = async (patientId: string, values: Record<string, string>) => {
     if (!workspace) return
-    const { data, error } = await supabase.from('patients').update({ ...values, weight_kg: values.weight_kg ? Number(values.weight_kg) : null, missed_appointments: Number(values.missed_appointments || 0), reminder_count: Number(values.reminder_count || 0), next_follow_up_date: values.next_follow_up_date || null, updated_at: new Date().toISOString() }).eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
+  const { data, error } = await supabase.from('patients').update({ ...values, weight_kg: values.weight_kg ? Number(values.weight_kg) : null, updated_at: new Date().toISOString() }).eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
     if (error) { setNotice(error.message); return }
     setPatients(current => current.map(patient => patient.id === patientId ? data as Patient : patient))
     setNotice('Clinical file saved.')
@@ -354,7 +370,7 @@ export default function App() {
   ]
 
   return <div className="app">
-    <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'}>
+    <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'} onMouseEnter={() => setSidebar(true)} onMouseLeave={() => setSidebar(false)}>
       {sidebar && <button className="mobile-drawer-close" type="button" aria-label="Close navigation" onClick={() => setSidebar(false)}><X size={20} /></button>}
       <div className="brand"><div className="brand-mark">S</div>{sidebar && <div><b>SculptOS</b><span>CLINIC</span></div>}</div>
       {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => navigateTo('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
@@ -375,16 +391,18 @@ export default function App() {
       <div className="page">
         {view === 'dashboard' && <Dashboard patients={patients} appointments={appointments} schedule={clinicSchedule} branchMetrics={branchMetrics} setView={setView} setPatientModalOpen={setPatientModalOpen} />}
         {view === 'appointments' && <section className="appointments-page"><Hero showHeader eyebrow="APPOINTMENTS" title="Appointments" copy="Book, review and manage your clinical schedule." action={<button className="primary" onClick={() => { setAppointmentSlot({ date: new Date(), label: '' }); setView('booking') }}><Plus size={16} /> Book appointment</button>} /><Scheduler doctors={activeDoctors} weekDays={weekDays} setWeekStart={setWeekStart} appointments={appointments} patients={patients} schedule={clinicSchedule} onOpenPatient={openPatient} onOpenSlot={slot => { setAppointmentSlot(slot); setView('booking') }} /></section>}
-        {view === 'booking' && appointmentSlot && <BookingPage doctors={activeDoctors} slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
+        {view === 'booking' && appointmentSlot && <BookingPage doctors={activeDoctors} patientGroups={patientGroups} slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} onOpenFile={patientId => { setSelectedPatientId(patientId); setView('patient_file') }} onNew={() => setPatientModalOpen(true)} />}
-        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} workspace={workspace} onNotice={setNotice} onBack={() => setView('patients')} onSave={saveClinicalFile} onBook={() => { setAppointmentSlot({ date: new Date(), label: '' }) }} onOpenImagingPage={() => setView('patient_imaging')} />}
+        {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} workspace={workspace} onNotice={setNotice} onBack={() => setView('patients')} onSave={saveClinicalFile} onOpenImagingPage={() => setView('patient_imaging')} />}
         {view === 'patient_imaging' && selectedPatient && <PatientImagingPage patient={selectedPatient} onBack={() => setView('patient_file')} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} onOpenCbctUpload={() => setView('cbct_upload')} />}
         {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_imaging')} />}
         {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
         {view === 'admin' && <AdminPage workspace={workspace} onRosterChange={setPractitioners} onNotice={setNotice} />}
+        {view === 'inventory' && <InventoryPage workspace={workspace} onNotice={setNotice} />}
+        {view === 'finance' && <FinancePage workspace={workspace} onNotice={setNotice} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
-        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
+        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports', 'inventory', 'finance'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
       </div>
     </main>
     {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
@@ -404,8 +422,8 @@ function Login({ notice }: { notice: string }) {
   </div>
 }
 function Hero({ eyebrow, title, copy, action, showHeader = false }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode; showHeader?: boolean }) {
-  if (showHeader) return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
-  return action ? <div className="page-action-row">{action}</div> : null
+  if (showHeader || !action) return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
+  return <div className="page-action-row">{action}</div>
 }
 
 function BranchSelector({ active, branches, onSelect }: { active: string; branches: Branch[]; onSelect: (branch: Branch) => void }) {
@@ -486,14 +504,13 @@ function Scheduler({ doctors, weekDays, setWeekStart, appointments, patients, sc
 }
 const dentalFindings = ['Deep caries involving pulp', 'Reversible pulpitis', 'Irreversible pulpitis', 'Pulp necrosis', 'Acute apical periodontitis', 'Chronic apical periodontitis', 'Periapical abscess', 'Chronic periodontitis', 'Generalised gingivitis', 'Mobility grade I', 'Mobility grade II', 'Mobility grade III', 'Impacted third molar', 'Pericoronitis', 'Retained root stump', 'Non-vital tooth', 'Fractured cusp', 'Attrition', 'Abrasion', 'Abfraction lesion', 'Clinical attachment loss', 'Furcation involvement', 'Malocclusion', 'Temporomandibular joint tenderness', 'Oral mucosal ulceration']
 const investigationOptions = ['IOPA radiograph', 'OPG', 'CBCT', 'Lateral cephalogram', 'Occlusal radiograph', 'Bitewing radiograph', 'Blood investigations', 'Photographs', 'Intraoral scan']
-const payerGroups = ['Self-pay', 'Ayushman Bharat PM-JAY', 'CGHS', 'ECHS', 'ESIC', 'State health scheme', 'Corporate insurance', 'TPA / private insurance', 'Other']
 
 function PatientsPage({ patients, onOpenFile, onNew }: { patients: Patient[]; onOpenFile: (id: string) => void; onNew: () => void }) {
   return <section><Hero showHeader eyebrow="PATIENTS" title="Patient management" copy="A branch-wide registry for follow-ups, reminders and clinical records." action={<button className="primary" onClick={onNew}><Plus size={16} /> New patient</button>} /><div className="panel patient-panel registry-panel"><div className="filter-row"><div><b>{patients.length} patients</b><span>Click a patient to open their full clinical file.</span></div><div className="registry-headings"><span>Follow-up</span><span>Scheme / group</span><span>Engagement</span></div></div>{patients.length ? patients.map(patient => <button className="patient-row registry-row" key={patient.id} onClick={() => onOpenFile(patient.id)}><div className="patient-name"><div className="avatar">{initials(patientName(patient))}</div><div><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone saved'}</span></div></div><div className="registry-item"><b>{patient.next_follow_up_date ? new Date(`${patient.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'}</b><span>{patient.missed_appointments} missed appointment{patient.missed_appointments === 1 ? '' : 's'}</span></div><div className="registry-item"><b>{patient.payer_group || 'Self-pay'}</b><span>{patient.primary_diagnosis || 'No diagnosis recorded'}</span></div><div className="registry-item"><b>{patient.reminder_count} reminder{patient.reminder_count === 1 ? '' : 's'}</b><span>Calls / bot attempts</span></div><ChevronRight size={16} /></button>) : <EmptyState label="No patient records yet. Add your first patient to begin the clinic workflow." />}</div></section>
 }
 
-function PatientFilePage({ patient, workspace, onNotice, onBack, onSave, onBook, onOpenImagingPage }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void; onOpenImagingPage: () => void }) {
-  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'}`} action={<div className="file-page-actions"><button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button><button className="primary" onClick={onOpenImagingPage}>Open imaging</button></div>} /><ClinicalFile patient={patient} workspace={workspace} onNotice={onNotice} onSave={onSave} onBook={onBook} /></section>
+function PatientFilePage({ patient, workspace, onNotice, onBack, onSave, onOpenImagingPage }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onBack: () => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onOpenImagingPage: () => void }) {
+  return <section className="patient-file-page"><Hero eyebrow="PATIENT CLINICAL FILE" title={patientName(patient)} copy={`${patient.patient_number} · ${patient.phone || 'No phone number'} · ${patientGroupName(patient)}`} action={<div className="file-page-actions"><button className="ghost" onClick={onBack}><ChevronLeft size={16} /> Back to patients</button><button className="primary" onClick={onOpenImagingPage}>Open imaging</button></div>} /><ClinicalFile patient={patient} workspace={workspace} onNotice={onNotice} onSave={onSave} /></section>
 }
 
 function PatientImagingPage({ patient, onBack, onOpenImaging, onOpenCbctUpload }: { patient: Patient; onBack: () => void; onOpenImaging: (asset: ImagingAsset) => void; onOpenCbctUpload: () => void }) {
@@ -728,8 +745,8 @@ function ImagingLibrary({ patient, onOpenImaging, onOpenCbctUpload }: { patient:
   </div>
 }
 
-function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onSave: (id: string, values: Record<string, string>) => Promise<void>; onBook: () => void }) {
-  const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '', next_follow_up_date: patient.next_follow_up_date || '', payer_group: patient.payer_group || 'Self-pay', missed_appointments: String(patient.missed_appointments || 0), reminder_count: String(patient.reminder_count || 0) })
+function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patient; workspace: Workspace; onNotice: (message: string) => void; onSave: (id: string, values: Record<string, string>) => Promise<void> }) {
+  const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '' })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
   const [customSuggestion, setCustomSuggestion] = useState({ investigations_advised: '', clinical_findings: '' })
@@ -759,7 +776,6 @@ function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patien
     {addingCustom[key] && <div className="custom-suggestion-entry"><input autoFocus value={customSuggestion[key]} onChange={event => setCustomSuggestion(current => ({ ...current, [key]: event.target.value }))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addCustomSuggestion(key) } }} /><button type="button" onClick={() => addCustomSuggestion(key)}>Add</button></div>}
     <textarea value={values[key]} onChange={event => set(key, event.target.value)} />
   </label>
-  const followUp = values.next_follow_up_date ? new Date(`${values.next_follow_up_date}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not scheduled'
   const risks = [values.allergies && 'Allergies recorded', values.illness_history && 'Medical history recorded', values.current_medications && 'Medication review needed'].filter(Boolean) as string[]
 
   return <div className="clinical-file-shell">
@@ -774,8 +790,7 @@ function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patien
       </div>
       <div className="clinical-snapshot">
         <div><span>Phone</span><strong>{patient.phone || 'Not added'}</strong></div>
-        <div><span>Scheme</span><strong>{values.payer_group || 'Self-pay'}</strong></div>
-        <div><span>Next follow-up</span><strong>{followUp}</strong></div>
+        <div><span>Patient group</span><strong>{patientGroupName(patient)}</strong></div>
       </div>
       <div className="clinical-risk">
         <span className="eyebrow">SAFETY CHECK</span>
@@ -785,7 +800,6 @@ function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patien
         <button type="button" onClick={() => jumpTo('medical-screening')}><span>01</span>Medical screening<ChevronRight size={15} /></button>
         <button type="button" onClick={() => jumpTo('presenting-problem')}><span>02</span>Complaint & history<ChevronRight size={15} /></button>
         <button type="button" onClick={() => jumpTo('clinical-assessment')}><span>03</span>Assessment<ChevronRight size={15} /></button>
-        <button type="button" onClick={() => jumpTo('care-coordination')}><span>04</span>Follow-up<ChevronRight size={15} /></button>
       </nav>
     </aside>
 
@@ -797,7 +811,7 @@ function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patien
           <p>Capture the essential history, examination and plan in the order of a real consultation.</p>
         </div>
         <div className="clinical-progress" aria-label="Clinical file workflow">
-          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><button type="button" onClick={() => jumpTo('care-coordination')}>Plan</button>
+          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><button type="button" onClick={() => jumpTo('treatment-plan')}>Plan</button>
         </div>
       </div>
 
@@ -842,22 +856,9 @@ function ClinicalFile({ patient, workspace, onNotice, onSave, onBook }: { patien
 
       <TreatmentPlan patient={patient} workspace={workspace} onNotice={onNotice} />
 
-      <section className="clinical-section" id="care-coordination">
-        <div className="clinical-section-head">
-          <div><span className="section-number">04</span><div><h3>Follow-up & engagement</h3><p>Keep the care plan and reception follow-through visible.</p></div></div>
-          <CalendarDays size={19} />
-        </div>
-        <div className="form-grid two">
-          <label><span className="field-label">Next follow-up date</span><input type="date" value={values.next_follow_up_date} onChange={event => set('next_follow_up_date', event.target.value)} /></label>
-          <label><span className="field-label">Patient group / scheme</span><select value={values.payer_group} onChange={event => set('payer_group', event.target.value)}>{payerGroups.map(group => <option key={group}>{group}</option>)}</select></label>
-          <label><span className="field-label">Missed appointments</span><input type="number" min="0" value={values.missed_appointments} onChange={event => set('missed_appointments', event.target.value)} /></label>
-          <label><span className="field-label">Reminder attempts</span><input type="number" min="0" value={values.reminder_count} onChange={event => set('reminder_count', event.target.value)} /><span className="field-help">Calls or AI-bot reminders logged by reception.</span></label>
-        </div>
-      </section>
-
       <div className="clinical-action-bar">
-        <div><strong>Ready to continue?</strong><span>Save this assessment before creating the next appointment.</span></div>
-        <div><button type="button" className="ghost" onClick={onBook}><CalendarDays size={16} /> Book follow-up</button><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
+        <div><strong>Ready to continue?</strong><span>Save this assessment before continuing the treatment plan.</span></div>
+        <div><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
       </div>
     </form>
   </div>
@@ -931,8 +932,8 @@ function PatientModal({ onClose, onSave }: { onClose: () => void; onSave: (value
   return <div className="modal-backdrop" role="presentation"><form className="modal form-modal" onSubmit={submit}><div className="modal-head"><div><span className="eyebrow">NEW PATIENT</span><h2>Create clinical record</h2></div><button type="button" className="icon-btn" onClick={onClose}><X size={18} /></button></div><div className="form-grid two"><div className="patient-name-entry"><label>Title<select value={values.patient_title} onChange={event => update('patient_title', event.target.value)}><option value="">Select</option><option value="Mr.">Mr.</option><option value="Ms.">Ms.</option><option value="Mrs.">Mrs.</option><option value="Dr.">Dr.</option></select></label>{field('first_name', 'First name')}{field('last_name', 'Last name')}</div><label>Date of birth<DobPicker value={values.date_of_birth} onChange={value => update('date_of_birth', value)} /></label><label>Sex<select value={values.sex} onChange={event => update('sex', event.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>{field('phone', 'Phone number')}{field('email', 'Email')}{field('location', 'Location')}{field('occupation', 'Occupation')}{field('referral_source', 'Referred by')}</div><div className="form-section"><h3>Clinical intake</h3><div className="form-grid"><SmartTextArea field="chief_complaint" label="Chief complaint" value={values.chief_complaint} onChange={value => update('chief_complaint', value)} />{field('history_present_illness', 'History of present illness', true)}<SmartTextArea field="medical_history" label="Medical history" value={values.medical_history} onChange={value => update('medical_history', value)} />{field('clinical_findings', 'Clinical findings', true)}{field('primary_diagnosis', 'Primary diagnosis', true)}{field('final_diagnosis', 'Final diagnosis', true)}<SmartTextArea field="treatment_advised" label="Treatment advised" value={values.treatment_advised} onChange={value => update('treatment_advised', value)} />{field('timeline_notes', 'Timeline / pre-op and post-op notes', true)}</div></div><div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={saving || !values.first_name.trim()}>{saving ? 'Saving…' : 'Save patient'}</button></div></form></div>
 }
 
-function BookingPage({ doctors, slot, schedule, appointments, onCancel, onSave }: { doctors: ScheduleDoctor[]; slot: Slot; schedule: ClinicSchedule; appointments: Appointment[]; onCancel: () => void; onSave: (values: typeof emptyPatient, doctor: ScheduleDoctor, duration: number, treatment: string, notes: string) => Promise<void> }) {
-  const [values, setValues] = useState(emptyPatient)
+function BookingPage({ doctors, patientGroups, slot, schedule, appointments, onCancel, onSave }: { doctors: ScheduleDoctor[]; patientGroups: PatientGroup[]; slot: Slot; schedule: ClinicSchedule; appointments: Appointment[]; onCancel: () => void; onSave: (values: typeof emptyPatient, doctor: ScheduleDoctor, duration: number, treatment: string, notes: string) => Promise<void> }) {
+  const [values, setValues] = useState(() => ({ ...emptyPatient, patient_group_id: patientGroups[0]?.id || '', payer_group: patientGroups[0]?.name || '' }))
   const [doctor, setDoctor] = useState(doctors[0]); const [duration, setDuration] = useState('30'); const [treatment, setTreatment] = useState('Check-up'); const [notes, setNotes] = useState(''); const [saving, setSaving] = useState(false)
   const set = (key: keyof typeof emptyPatient, value: string) => setValues(current => ({ ...current, [key]: value }))
   const field = (key: keyof typeof emptyPatient, label: string, area = false) => <label>{label}{area ? <textarea value={values[key]} onChange={event => set(key, event.target.value)} /> : <input value={values[key]} onChange={event => set(key, event.target.value)} />}</label>
@@ -948,7 +949,7 @@ function BookingPage({ doctors, slot, schedule, appointments, onCancel, onSave }
   return <section className="booking-page"><Hero eyebrow="NEW APPOINTMENT" title="Book appointment" copy="Create the patient record and confirm the visit in one workflow." action={<button className="ghost" onClick={onCancel}><ChevronLeft size={16} /> Back to appointments</button>} /><form className="panel booking-form" onSubmit={submit}>
     <div className="booking-slot"><CalendarDays size={17} /><div><span>Selected appointment time</span><b>{slot.date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {slot.label || formatTime(slot.date.toISOString())}</b></div></div>
     <div className="booking-section"><div className="section-heading"><span>01</span><div><h3>Patient details</h3><p>Enter the details recorded at reception.</p></div></div><div className="form-grid two"><div className="patient-name-entry"><label>Title<select value={values.patient_title} onChange={event => set('patient_title', event.target.value)}><option value="">Select</option><option value="Mr.">Mr.</option><option value="Ms.">Ms.</option><option value="Mrs.">Mrs.</option><option value="Dr.">Dr.</option></select></label>{field('first_name', 'Patient name *')}</div><label>Patient ID<input value="Generated automatically" disabled /></label><label>Date of birth<DobPicker value={values.date_of_birth} onChange={value => set('date_of_birth', value)} /></label><label>Age<input value={ageFromDob(values.date_of_birth)} placeholder="Auto-filled from DOB" readOnly /></label><label>Sex<select value={values.sex} onChange={event => set('sex', event.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></label>{field('phone', 'Phone number')}{field('location', 'Address')}{field('occupation', 'Occupation')}{field('email', 'Email ID')}</div><div className="form-grid"><SmartTextArea field="chief_complaint" label="Chief complaint" value={values.chief_complaint} onChange={value => set('chief_complaint', value)} /></div></div>
-    <div className="booking-section"><div className="section-heading"><span>02</span><div><h3>Appointment details</h3><p>Assign the clinician and define the visit.</p></div></div><div className="form-grid two"><label>Assigned doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name} value={item.name} disabled={!isDoctorAvailable(item)}>{item.name}{isDoctorAvailable(item) ? '' : ' — unavailable'}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label></div><label>Visit type<input value={treatment} onChange={event => setTreatment(event.target.value)} /></label><label>Reception note<textarea value={notes} onChange={event => setNotes(event.target.value)} /></label></div>
+    <div className="booking-section"><div className="section-heading"><span>02</span><div><h3>Appointment details</h3><p>Assign the clinician and define the visit.</p></div></div><div className="form-grid two"><label>Assigned doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name} value={item.name} disabled={!isDoctorAvailable(item)}>{item.name}{isDoctorAvailable(item) ? '' : ' — unavailable'}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label><label>Patient group / scheme<select value={values.patient_group_id} onChange={event => { const group = patientGroups.find(item => item.id === event.target.value); setValues(current => ({ ...current, patient_group_id: group?.id || '', payer_group: group?.name || '' })) }} required>{patientGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label></div><label>Visit type<input value={treatment} onChange={event => setTreatment(event.target.value)} /></label><label>Reception note<textarea value={notes} onChange={event => setNotes(event.target.value)} /></label></div>
     <div className="booking-footer"><p>A patient record and confirmed appointment will be created together.</p><div><button type="button" className="ghost" onClick={onCancel}>Cancel</button><button className="primary" disabled={saving || !values.first_name.trim() || !hasAvailableDoctor}>{saving ? 'Confirming…' : 'Confirm appointment'}</button></div></div>
   </form></section>
 }
@@ -967,13 +968,13 @@ function AppointmentModal({ slot, patients, selectedPatientId, onClose, onSave }
     event.preventDefault()
     if (!patientId) return
     setSaving(true)
-    await onSave({ patient_id: patientId, clinician_name: doctor.name, clinician_color: doctor.color, scheduled_at: slot.date.toISOString(), duration_minutes: Number(duration), treatment_label: treatment || 'Check-up', status: 'confirmed', notes })
+    await onSave({ patient_id: patientId, patient_group_id: selectedPatient?.patient_group_id || null, clinician_name: doctor.name, clinician_color: doctor.color, scheduled_at: slot.date.toISOString(), duration_minutes: Number(duration), treatment_label: treatment || 'Check-up', status: 'confirmed', notes })
     setSaving(false)
   }
   return <div className="modal-backdrop" role="presentation"><form className="modal appointment-modal" onSubmit={submit}>
     <div className="modal-head"><div><span className="eyebrow">BOOK APPOINTMENT</span><h2>Appointment details</h2><p className="booking-time"><CalendarDays size={14} /> {slot.date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {slot.label || formatTime(slot.date.toISOString())}</p></div><button type="button" className="icon-btn" onClick={onClose}><X size={18} /></button></div>
     {patients.length ? <><div className="booking-patient-picker"><label>Find patient by name, ID or phone number<input value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Search patient…" /></label><div className="patient-options">{matchingPatients.slice(0, 5).map(patient => <button type="button" className={patient.id === patientId ? 'patient-option selected' : 'patient-option'} key={patient.id} onClick={() => { setPatientId(patient.id); setPatientSearch('') }}><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone number'}</span></button>)}</div></div>
-    {selectedPatient && <div className="appointment-patient-summary"><div><span>Patient name</span><b>{patientName(selectedPatient)}</b></div><div><span>Patient ID</span><b>{selectedPatient.patient_number}</b></div><div><span>Age / sex</span><b>{selectedPatient.date_of_birth ? `${new Date().getFullYear() - new Date(selectedPatient.date_of_birth).getFullYear()} years` : 'Not recorded'} · {selectedPatient.sex || 'Not recorded'}</b></div><div><span>Phone number</span><b>{selectedPatient.phone || 'Not recorded'}</b></div><div><span>Address</span><b>{selectedPatient.location || 'Not recorded'}</b></div><div><span>Occupation</span><b>{selectedPatient.occupation || 'Not recorded'}</b></div><div className="wide"><span>Chief complaint</span><b>{selectedPatient.chief_complaint || 'Not recorded'}</b></div></div>}
+    {selectedPatient && <div className="appointment-patient-summary"><div><span>Patient name</span><b>{patientName(selectedPatient)}</b></div><div><span>Patient ID</span><b>{selectedPatient.patient_number}</b></div><div><span>Patient group</span><b>{patientGroupName(selectedPatient)}</b></div><div><span>Age / sex</span><b>{selectedPatient.date_of_birth ? `${new Date().getFullYear() - new Date(selectedPatient.date_of_birth).getFullYear()} years` : 'Not recorded'} · {selectedPatient.sex || 'Not recorded'}</b></div><div><span>Phone number</span><b>{selectedPatient.phone || 'Not recorded'}</b></div><div><span>Address</span><b>{selectedPatient.location || 'Not recorded'}</b></div><div><span>Occupation</span><b>{selectedPatient.occupation || 'Not recorded'}</b></div><div className="wide"><span>Chief complaint</span><b>{selectedPatient.chief_complaint || 'Not recorded'}</b></div></div>}
     <div className="form-grid two"><label>Assigned doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name}>{item.name}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label></div>
     <label>Treatment / visit type<input value={treatment} onChange={event => setTreatment(event.target.value)} placeholder="e.g. Review, extraction, consult" /></label><label>Appointment note<textarea value={notes} onChange={event => setNotes(event.target.value)} placeholder="Optional receptionist or clinical note" /></label>
     <div className="sms-note"><Activity size={15} /><span>On confirmation, SMS notifications are queued for the patient and {doctor.name}. Delivery activates when the clinic SMS provider is connected.</span></div>
