@@ -1,81 +1,24 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { CheckCircle2, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
+import { CalendarRange, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
 import { supabase } from './lib/supabase'
 
-export type Practitioner = {
-  id: string
-  full_name: string
-  practitioner_role: string
-  registration_number: string | null
-  schedule_color: 'teal' | 'violet' | 'amber'
-  active: boolean
-}
-type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
+export type Practitioner = { id:string; full_name:string; practitioner_role:string; registration_number:string|null; schedule_color:'teal'|'violet'|'amber'; active:boolean }
+type Workspace = { organizationId:string; clinicId:string; clinicName:string; role:string }
+type Membership = { id:string; user_id:string; role:string; active:boolean }
+type Override = { membership_id:string; permission:string; effect:'allow'|'deny' }
+type Leave = { id:string; staff_name:string; start_date:string; end_date:string; status:'pending'|'approved'|'rejected'; note:string|null }
+const permissions=['inventory.view','inventory.manage','finance.view','finance.manage']
 
-export function AdminPage({ workspace, onRosterChange, onNotice }: { workspace: Workspace; onRosterChange: (items: Practitioner[]) => void; onNotice: (message: string) => void }) {
-  const [practitioners, setPractitioners] = useState<Practitioner[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [values, setValues] = useState({ full_name: '', practitioner_role: 'Doctor', registration_number: '', schedule_color: 'teal' as Practitioner['schedule_color'] })
-
-  const load = async () => {
-    setLoading(true)
-    const { data, error } = await supabase.from('clinic_practitioners').select('id, full_name, practitioner_role, registration_number, schedule_color, active').eq('clinic_id', workspace.clinicId).order('full_name')
-    if (error) onNotice(error.message)
-    const roster = (data || []) as Practitioner[]
-    setPractitioners(roster); onRosterChange(roster); setLoading(false)
-  }
-  useEffect(() => { void load() }, [workspace.clinicId])
-
-  const add = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!values.full_name.trim()) return
-    setSaving(true)
-    const { error } = await supabase.from('clinic_practitioners').insert({
-      organization_id: workspace.organizationId, clinic_id: workspace.clinicId,
-      full_name: values.full_name.trim(), practitioner_role: values.practitioner_role,
-      registration_number: values.registration_number.trim() || null, schedule_color: values.schedule_color,
-    })
-    setSaving(false)
-    if (error) { onNotice(error.message); return }
-    setValues({ full_name: '', practitioner_role: 'Doctor', registration_number: '', schedule_color: 'teal' })
-    await load()
-  }
-
-  const setActive = async (member: Practitioner) => {
-    const { error } = await supabase.from('clinic_practitioners').update({ active: !member.active }).eq('id', member.id).eq('clinic_id', workspace.clinicId)
-    if (error) { onNotice(error.message); return }
-    await load()
-  }
-
-  const canManage = workspace.role === 'admin'
-  return <section className="admin-page">
-    <div className="hero"><div><span className="eyebrow">BRANCH ADMINISTRATION</span><h1>Admin controls</h1><p>Manage the clinicians available to this branch and keep high-risk actions under approved access.</p></div></div>
-    {!canManage && <div className="admin-lock"><ShieldCheck size={19}/><div><b>Administrator access required</b><span>Your account can view the branch roster, but only an administrator can make changes.</span></div></div>}
-    <div className="admin-grid">
-      <div className="panel admin-roster">
-        <div className="admin-section-title"><div><span className="eyebrow">SCHEDULING TEAM</span><h2>Clinician roster</h2><p>Added doctors are available in this branch’s appointment picker immediately.</p></div><UsersRound size={22}/></div>
-        {canManage && <form className="admin-form" onSubmit={add}>
-          <label><span>Doctor / team member name</span><input value={values.full_name} onChange={event => setValues(current => ({...current, full_name: event.target.value}))} placeholder="e.g. Dr. Vijay Kumar" required /></label>
-          <label><span>Role</span><select value={values.practitioner_role} onChange={event => setValues(current => ({...current, practitioner_role: event.target.value}))}><option>Doctor</option><option>Specialist</option><option>Visiting consultant</option><option>Hygienist</option><option>Assistant</option></select></label>
-          <label><span>Registration / licence no.</span><input value={values.registration_number} onChange={event => setValues(current => ({...current, registration_number: event.target.value}))} placeholder="Optional" /></label>
-          <label><span>Schedule colour</span><select value={values.schedule_color} onChange={event => setValues(current => ({...current, schedule_color: event.target.value as Practitioner['schedule_color']}))}><option value="teal">Teal</option><option value="violet">Violet</option><option value="amber">Amber</option></select></label>
-          <button className="primary" disabled={saving}><UserPlus size={16}/>{saving ? 'Adding…' : 'Add to branch'}</button>
-        </form>}
-        <div className="practitioner-list">
-          {loading ? <p>Loading clinician roster…</p> : practitioners.length ? practitioners.map(member => <div className="practitioner-row" key={member.id}><i className={`doctor-swatch ${member.schedule_color}`}/><div><b>{member.full_name}</b><span>{member.practitioner_role}{member.registration_number ? ` · Reg. ${member.registration_number}` : ''}</span></div>{canManage ? <button className="ghost small" onClick={() => void setActive(member)}>{member.active ? 'Remove from schedule' : 'Restore to schedule'}</button> : <em>{member.active ? 'Active' : 'Inactive'}</em>}</div>) : <p className="admin-empty">No branch clinicians yet. Add your first doctor to make the appointment grid personal to this clinic.</p>}
-        </div>
-      </div>
-      <div className="panel admin-security">
-        <div className="admin-section-title"><div><span className="eyebrow">CONTROLLED ACTIONS</span><h2>Permission safeguards</h2><p>These actions remain restricted to authorised clinic administrators.</p></div><ShieldCheck size={22}/></div>
-        <div className="security-list">
-          <div><CheckCircle2 size={17}/><span><b>Leave approval</b><small>Approve staff leave before the roster is changed.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Patient-file deletion</b><small>Only admins can authorise irreversible record deletion.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Diagnosis changes</b><small>Clinical-file updates require a clinician permission.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Team access</b><small>Only admins can add, remove or deactivate branch clinicians.</small></span></div>
-        </div>
-        <p className="admin-security-note">Adding someone to the roster does not automatically create a login or give access to patient data. Login access remains a separate, permission-controlled step.</p>
-      </div>
-    </div>
-  </section>
+export function AdminPage({workspace,onRosterChange,onNotice}:{workspace:Workspace;onRosterChange:(items:Practitioner[])=>void;onNotice:(message:string)=>void}){
+ const [practitioners,setPractitioners]=useState<Practitioner[]>([]),[memberships,setMemberships]=useState<Membership[]>([]),[overrides,setOverrides]=useState<Override[]>([]),[leaves,setLeaves]=useState<Leave[]>([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false)
+ const [values,setValues]=useState({full_name:'',practitioner_role:'Doctor',registration_number:'',schedule_color:'teal' as Practitioner['schedule_color']})
+ const canManage=workspace.role==='admin'
+ const load=async()=>{setLoading(true);const [roster,member,override,leave]=await Promise.all([supabase.from('clinic_practitioners').select('id,full_name,practitioner_role,registration_number,schedule_color,active').eq('clinic_id',workspace.clinicId).order('full_name'),supabase.from('memberships').select('id,user_id,role,active').eq('clinic_id',workspace.clinicId).order('role'),supabase.from('membership_permission_overrides').select('membership_id,permission,effect'),supabase.from('staff_leave_requests').select('id,staff_name,start_date,end_date,status,note').eq('clinic_id',workspace.clinicId).order('start_date',{ascending:false})]);const error=roster.error||member.error||override.error||leave.error;if(error)onNotice(error.message);const next=(roster.data||[]) as Practitioner[];setPractitioners(next);onRosterChange(next);setMemberships((member.data||[]) as Membership[]);setOverrides((override.data||[]) as Override[]);setLeaves((leave.data||[]) as Leave[]);setLoading(false)}
+ useEffect(()=>{void load()},[workspace.clinicId])
+ const add=async(event:FormEvent)=>{event.preventDefault();if(!values.full_name.trim())return;setSaving(true);const {error}=await supabase.from('clinic_practitioners').insert({organization_id:workspace.organizationId,clinic_id:workspace.clinicId,full_name:values.full_name.trim(),practitioner_role:values.practitioner_role,registration_number:values.registration_number.trim()||null,schedule_color:values.schedule_color});setSaving(false);if(error){onNotice(error.message);return}setValues({full_name:'',practitioner_role:'Doctor',registration_number:'',schedule_color:'teal'});onNotice('Team member added to this branch.');await load()}
+ const setActive=async(member:Practitioner)=>{const {error}=await supabase.from('clinic_practitioners').update({active:!member.active}).eq('id',member.id).eq('clinic_id',workspace.clinicId);if(error)onNotice(error.message);else{onNotice(member.active?'Removed from appointment schedule.':'Restored to appointment schedule.');await load()}}
+ const toggleOverride=async(member:Membership,permission:string)=>{const existing=overrides.find(row=>row.membership_id===member.id&&row.permission===permission);const user=(await supabase.auth.getUser()).data.user;if(existing){const {error}=await supabase.from('membership_permission_overrides').delete().eq('membership_id',member.id).eq('permission',permission);if(error){onNotice(error.message);return}onNotice('Custom rule removed; the role default now applies.')}else{const {error}=await supabase.from('membership_permission_overrides').upsert({membership_id:member.id,permission,effect:'allow',granted_by:user?.id});if(error){onNotice(error.message);return}onNotice('Permission granted by administrator.')}await load()}
+ const addLeave=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const form=new FormData(event.currentTarget);const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('staff_leave_requests').insert({clinic_id:workspace.clinicId,staff_name:String(form.get('staff_name')).trim(),start_date:String(form.get('start_date')),end_date:String(form.get('end_date')),note:String(form.get('note')).trim()||null,requested_by:user?.id,status:'approved',approved_by:user?.id,approved_at:new Date().toISOString()});if(error)onNotice(error.message);else{onNotice('Approved leave saved to the clinic record.');event.currentTarget.reset();await load()}}
+ const setLeave=async(leave:Leave,status:Leave['status'])=>{const user=(await supabase.auth.getUser()).data.user;const {error}=await supabase.from('staff_leave_requests').update({status,approved_by:user?.id,approved_at:new Date().toISOString()}).eq('id',leave.id);if(error)onNotice(error.message);else{onNotice('Leave request updated.');await load()}}
+ return <section className="admin-page"><div className="hero-row"><div><span className="eyebrow">BRANCH ADMINISTRATION</span><h1>Admin controls</h1><p className="muted">Manage the branch team, approved availability and access to operational modules.</p></div></div>{!canManage&&<div className="admin-lock"><ShieldCheck size={19}/><div><b>Administrator access required</b><span>You can review the branch roster, but only an administrator can change team, leave or access controls.</span></div></div>}<div className="admin-grid"><div className="panel admin-roster"><div className="admin-section-title"><div><span className="eyebrow">SCHEDULING TEAM</span><h2>Clinician & staff roster</h2><p>Add doctors and staff to the branch, then set whether they appear in appointment scheduling.</p></div><UsersRound size={22}/></div>{canManage&&<form className="admin-form" onSubmit={add}><label><span>Name</span><input value={values.full_name} onChange={event=>setValues(current=>({...current,full_name:event.target.value}))} placeholder="e.g. Dr. Vijay Kumar" required/></label><label><span>Role</span><select value={values.practitioner_role} onChange={event=>setValues(current=>({...current,practitioner_role:event.target.value}))}><option>Doctor</option><option>Specialist</option><option>Visiting consultant</option><option>Hygienist</option><option>Assistant</option><option>Receptionist</option></select></label><label><span>Registration / licence no.</span><input value={values.registration_number} onChange={event=>setValues(current=>({...current,registration_number:event.target.value}))} placeholder="Optional"/></label><label><span>Schedule colour</span><select value={values.schedule_color} onChange={event=>setValues(current=>({...current,schedule_color:event.target.value as Practitioner['schedule_color']}))}><option value="teal">Teal</option><option value="violet">Violet</option><option value="amber">Amber</option></select></label><button className="primary" disabled={saving}><UserPlus size={16}/>{saving?'Adding…':'Add to branch'}</button></form>}<div className="practitioner-list">{loading?<p>Loading clinic controls…</p>:practitioners.map(member=><div className="practitioner-row" key={member.id}><i className={'doctor-swatch '+member.schedule_color}/><div><b>{member.full_name}</b><span>{member.practitioner_role}{member.registration_number?' · Reg. '+member.registration_number:''}</span></div>{canManage?<button className="ghost small" onClick={()=>void setActive(member)}>{member.active?'Remove from schedule':'Restore to schedule'}</button>:<em>{member.active?'Active':'Inactive'}</em>}</div>)}</div></div><div className="panel admin-access"><div className="admin-section-title"><div><span className="eyebrow">ACCESSIBILITY</span><h2>Module access</h2><p>Grant or remove explicit operational permissions for each clinic login.</p></div><ShieldCheck size={22}/></div>{!memberships.length?<p className="admin-empty">No signed-in team accounts are linked to this branch yet. Adding a roster member does not create a login.</p>:<div className="access-list">{memberships.map(member=><div className="access-member" key={member.id}><div><b>{member.role}</b><small>Account · {member.user_id.slice(0,8)}… {member.active?'Active':'Inactive'}</small></div><div className="permission-chips">{permissions.map(permission=>{const granted=overrides.some(row=>row.membership_id===member.id&&row.permission===permission&&row.effect==='allow');return <button disabled={!canManage} key={permission} className={granted?'permission-chip active':'permission-chip'} onClick={()=>void toggleOverride(member,permission)}>{granted?'Granted':'Role default'} · {permission.replace('.',' ')}</button>})}</div></div>)}</div>}<p className="admin-security-note">These are real overrides for Inventory and Finance. Their default access still comes from the member’s role; only an administrator can change an override.</p></div></div><div className="panel admin-leave"><div className="admin-section-title"><div><span className="eyebrow">AVAILABILITY</span><h2>Approved leave</h2><p>Keep doctor and staff availability clear before changes reach the schedule.</p></div><CalendarRange size={22}/></div>{canManage&&<form className="admin-form leave-form" onSubmit={addLeave}><label><span>Staff member</span><select name="staff_name" required><option value="">Select team member</option>{practitioners.map(member=><option key={member.id}>{member.full_name}</option>)}</select></label><label><span>Start date</span><input name="start_date" type="date" required/></label><label><span>End date</span><input name="end_date" type="date" required/></label><label><span>Note</span><input name="note" placeholder="Optional reason"/></label><button className="primary">Add approved leave</button></form>}<div className="leave-list">{!leaves.length?<p className="admin-empty">No leave has been recorded for this branch.</p>:leaves.map(leave=><div className="leave-row" key={leave.id}><div><b>{leave.staff_name}</b><span>{new Date(leave.start_date).toLocaleDateString('en-IN')} – {new Date(leave.end_date).toLocaleDateString('en-IN')}{leave.note?' · '+leave.note:''}</span></div><div>{canManage&&leave.status==='pending'?<><button className="ghost small" onClick={()=>void setLeave(leave,'approved')}>Approve</button><button className="ghost small" onClick={()=>void setLeave(leave,'rejected')}>Reject</button></>:<i className={leave.status==='approved'?'status active':'status'}>{leave.status}</i>}</div></div>)}</div></div></section>
 }

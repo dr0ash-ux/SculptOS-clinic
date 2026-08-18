@@ -9,6 +9,7 @@ import { AdminPage, Practitioner } from './AdminPage'
 import { TreatmentPlan } from './TreatmentPlan'
 import { TreatmentPriceList } from './TreatmentPricing'
 import { InventoryPage } from './InventoryPage'
+import { FinancePage } from './FinancePage'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -355,7 +356,7 @@ export default function App() {
   ]
 
   return <div className="app">
-    <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'}>
+    <aside className={sidebar ? 'sidebar' : 'sidebar collapsed'} onMouseEnter={() => setSidebar(true)} onMouseLeave={() => setSidebar(false)}>
       {sidebar && <button className="mobile-drawer-close" type="button" aria-label="Close navigation" onClick={() => setSidebar(false)}><X size={20} /></button>}
       <div className="brand"><div className="brand-mark">S</div>{sidebar && <div><b>SculptOS</b><span>CLINIC</span></div>}</div>
       {sidebar && <div className="workspace"><span>WORKSPACE</span><button className="clinic-switch" onClick={() => navigateTo('settings')}>{workspace.clinicName}<ChevronRight size={14} /></button></div>}
@@ -384,9 +385,10 @@ export default function App() {
         {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
         {view === 'admin' && <AdminPage workspace={workspace} onRosterChange={setPractitioners} onNotice={setNotice} />}
         {view === 'inventory' && <InventoryPage workspace={workspace} onNotice={setNotice} />}
+        {view === 'finance' && <FinancePage workspace={workspace} onNotice={setNotice} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
-        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports', 'inventory'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
+        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports', 'inventory', 'finance'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
       </div>
     </main>
     {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
@@ -406,8 +408,8 @@ function Login({ notice }: { notice: string }) {
   </div>
 }
 function Hero({ eyebrow, title, copy, action, showHeader = false }: { eyebrow: string; title: string; copy: string; action?: React.ReactNode; showHeader?: boolean }) {
-  if (showHeader) return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
-  return action ? <div className="page-action-row">{action}</div> : null
+  if (showHeader || !action) return <div className="hero-row"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="muted">{copy}</p></div>{action}</div>
+  return <div className="page-action-row">{action}</div>
 }
 
 function BranchSelector({ active, branches, onSelect }: { active: string; branches: Branch[]; onSelect: (branch: Branch) => void }) {
