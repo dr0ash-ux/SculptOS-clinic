@@ -8,6 +8,7 @@ import { signInWithGoogle, signInWithPassword, signOut, supabase } from './lib/s
 import { AdminPage, Practitioner } from './AdminPage'
 import { TreatmentPlan } from './TreatmentPlan'
 import { TreatmentPriceList } from './TreatmentPricing'
+import { InventoryPage } from './InventoryPage'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -382,9 +383,10 @@ export default function App() {
         {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_imaging')} />}
         {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
         {view === 'admin' && <AdminPage workspace={workspace} onRosterChange={setPractitioners} onNotice={setNotice} />}
+        {view === 'inventory' && <InventoryPage workspace={workspace} onNotice={setNotice} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
-        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
+        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports', 'inventory'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
       </div>
     </main>
     {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
