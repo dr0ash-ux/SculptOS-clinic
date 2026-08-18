@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, FileText,
+  Activity, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, CreditCard, FileText,
   LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
   UserRound, Users, WalletCards, X,
 } from 'lucide-react'
