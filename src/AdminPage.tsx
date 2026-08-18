@@ -1,81 +1,16 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { CheckCircle2, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
+import { CalendarRange, ShieldCheck, UserPlus, UsersRound } from 'lucide-react'
 import { supabase } from './lib/supabase'
-
-export type Practitioner = {
-  id: string
-  full_name: string
-  practitioner_role: string
-  registration_number: string | null
-  schedule_color: 'teal' | 'violet' | 'amber'
-  active: boolean
-}
-type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
-
-export function AdminPage({ workspace, onRosterChange, onNotice }: { workspace: Workspace; onRosterChange: (items: Practitioner[]) => void; onNotice: (message: string) => void }) {
-  const [practitioners, setPractitioners] = useState<Practitioner[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [values, setValues] = useState({ full_name: '', practitioner_role: 'Doctor', registration_number: '', schedule_color: 'teal' as Practitioner['schedule_color'] })
-
-  const load = async () => {
-    setLoading(true)
-    const { data, error } = await supabase.from('clinic_practitioners').select('id, full_name, practitioner_role, registration_number, schedule_color, active').eq('clinic_id', workspace.clinicId).order('full_name')
-    if (error) onNotice(error.message)
-    const roster = (data || []) as Practitioner[]
-    setPractitioners(roster); onRosterChange(roster); setLoading(false)
-  }
-  useEffect(() => { void load() }, [workspace.clinicId])
-
-  const add = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!values.full_name.trim()) return
-    setSaving(true)
-    const { error } = await supabase.from('clinic_practitioners').insert({
-      organization_id: workspace.organizationId, clinic_id: workspace.clinicId,
-      full_name: values.full_name.trim(), practitioner_role: values.practitioner_role,
-      registration_number: values.registration_number.trim() || null, schedule_color: values.schedule_color,
-    })
-    setSaving(false)
-    if (error) { onNotice(error.message); return }
-    setValues({ full_name: '', practitioner_role: 'Doctor', registration_number: '', schedule_color: 'teal' })
-    await load()
-  }
-
-  const setActive = async (member: Practitioner) => {
-    const { error } = await supabase.from('clinic_practitioners').update({ active: !member.active }).eq('id', member.id).eq('clinic_id', workspace.clinicId)
-    if (error) { onNotice(error.message); return }
-    await load()
-  }
-
-  const canManage = workspace.role === 'admin'
-  return <section className="admin-page">
-    <div className="hero"><div><span className="eyebrow">BRANCH ADMINISTRATION</span><h1>Admin controls</h1><p>Manage the clinicians available to this branch and keep high-risk actions under approved access.</p></div></div>
-    {!canManage && <div className="admin-lock"><ShieldCheck size={19}/><div><b>Administrator access required</b><span>Your account can view the branch roster, but only an administrator can make changes.</span></div></div>}
-    <div className="admin-grid">
-      <div className="panel admin-roster">
-        <div className="admin-section-title"><div><span className="eyebrow">SCHEDULING TEAM</span><h2>Clinician roster</h2><p>Added doctors are available in this branch’s appointment picker immediately.</p></div><UsersRound size={22}/></div>
-        {canManage && <form className="admin-form" onSubmit={add}>
-          <label><span>Doctor / team member name</span><input value={values.full_name} onChange={event => setValues(current => ({...current, full_name: event.target.value}))} placeholder="e.g. Dr. Vijay Kumar" required /></label>
-          <label><span>Role</span><select value={values.practitioner_role} onChange={event => setValues(current => ({...current, practitioner_role: event.target.value}))}><option>Doctor</option><option>Specialist</option><option>Visiting consultant</option><option>Hygienist</option><option>Assistant</option></select></label>
-          <label><span>Registration / licence no.</span><input value={values.registration_number} onChange={event => setValues(current => ({...current, registration_number: event.target.value}))} placeholder="Optional" /></label>
-          <label><span>Schedule colour</span><select value={values.schedule_color} onChange={event => setValues(current => ({...current, schedule_color: event.target.value as Practitioner['schedule_color']}))}><option value="teal">Teal</option><option value="violet">Violet</option><option value="amber">Amber</option></select></label>
-          <button className="primary" disabled={saving}><UserPlus size={16}/>{saving ? 'Adding…' : 'Add to branch'}</button>
-        </form>}
-        <div className="practitioner-list">
-          {loading ? <p>Loading clinician roster…</p> : practitioners.length ? practitioners.map(member => <div className="practitioner-row" key={member.id}><i className={`doctor-swatch ${member.schedule_color}`}/><div><b>{member.full_name}</b><span>{member.practitioner_role}{member.registration_number ? ` · Reg. ${member.registration_number}` : ''}</span></div>{canManage ? <button className="ghost small" onClick={() => void setActive(member)}>{member.active ? 'Remove from schedule' : 'Restore to schedule'}</button> : <em>{member.active ? 'Active' : 'Inactive'}</em>}</div>) : <p className="admin-empty">No branch clinicians yet. Add your first doctor to make the appointment grid personal to this clinic.</p>}
-        </div>
-      </div>
-      <div className="panel admin-security">
-        <div className="admin-section-title"><div><span className="eyebrow">CONTROLLED ACTIONS</span><h2>Permission safeguards</h2><p>These actions remain restricted to authorised clinic administrators.</p></div><ShieldCheck size={22}/></div>
-        <div className="security-list">
-          <div><CheckCircle2 size={17}/><span><b>Leave approval</b><small>Approve staff leave before the roster is changed.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Patient-file deletion</b><small>Only admins can authorise irreversible record deletion.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Diagnosis changes</b><small>Clinical-file updates require a clinician permission.</small></span></div>
-          <div><CheckCircle2 size={17}/><span><b>Team access</b><small>Only admins can add, remove or deactivate branch clinicians.</small></span></div>
-        </div>
-        <p className="admin-security-note">Adding someone to the roster does not automatically create a login or give access to patient data. Login access remains a separate, permission-controlled step.</p>
-      </div>
-    </div>
-  </section>
-}
+export type Practitioner={id:string;full_name:string;practitioner_role:string;registration_number:string|null;schedule_color:'teal'|'violet'|'amber';active:boolean}
+type Workspace={organizationId:string;clinicId:string;clinicName:string;role:string};type Membership={id:string;user_id:string;role:string;active:boolean};type Override={membership_id:string;permission:string;effect:'allow'|'deny'};type Leave={id:string;staff_name:string;start_date:string;end_date:string;status:'pending'|'approved'|'rejected';note:string|null};type PatientGroup={id:string;name:string;sort_order:number;active:boolean}
+const permissions=['inventory.view','inventory.manage','finance.view','finance.manage']
+export function AdminPage({workspace,onRosterChange,onNotice}:{workspace:Workspace;onRosterChange:(items:Practitioner[])=>void;onNotice:(message:string)=>void}){
+const [practitioners,setPractitioners]=useState<Practitioner[]>([]),[memberships,setMemberships]=useState<Membership[]>([]),[overrides,setOverrides]=useState<Override[]>([]),[leaves,setLeaves]=useState<Leave[]>([]),[groups,setGroups]=useState<PatientGroup[]>([]),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[newGroup,setNewGroup]=useState(''),[values,setValues]=useState({full_name:'',practitioner_role:'Doctor',registration_number:'',schedule_color:'teal' as Practitioner['schedule_color']});const canManage=workspace.role==='admin'
+const load=async()=>{setLoading(true);const[r,m,o,l,g]=await Promise.all([supabase.from('clinic_practitioners').select('id,full_name,practitioner_role,registration_number,schedule_color,active').eq('clinic_id',workspace.clinicId).order('full_name'),supabase.from('memberships').select('id,user_id,role,active').eq('clinic_id',workspace.clinicId).order('role'),supabase.from('membership_permission_overrides').select('membership_id,permission,effect'),supabase.from('staff_leave_requests').select('id,staff_name,start_date,end_date,status,note').eq('clinic_id',workspace.clinicId).order('start_date',{ascending:false}),supabase.from('patient_groups').select('id,name,sort_order,active').eq('clinic_id',workspace.clinicId).order('sort_order').order('name')]);const error=r.error||m.error||o.error||l.error||g.error;if(error)onNotice(error.message);const roster=(r.data||[])as Practitioner[];setPractitioners(roster);onRosterChange(roster);setMemberships((m.data||[])as Membership[]);setOverrides((o.data||[])as Override[]);setLeaves((l.data||[])as Leave[]);setGroups((g.data||[])as PatientGroup[]);setLoading(false)}
+useEffect(()=>{void load()},[workspace.clinicId])
+const add=async(e:FormEvent)=>{e.preventDefault();if(!values.full_name.trim())return;setSaving(true);const{error}=await supabase.from('clinic_practitioners').insert({organization_id:workspace.organizationId,clinic_id:workspace.clinicId,full_name:values.full_name.trim(),practitioner_role:values.practitioner_role,registration_number:values.registration_number.trim()||null,schedule_color:values.schedule_color});setSaving(false);if(error)onNotice(error.message);else{setValues({full_name:'',practitioner_role:'Doctor',registration_number:'',schedule_color:'teal'});onNotice('Team member added.');await load()}}
+const toggleOverride=async(member:Membership,permission:string)=>{const existing=overrides.find(x=>x.membership_id===member.id&&x.permission===permission);const result=existing?await supabase.from('membership_permission_overrides').delete().eq('membership_id',member.id).eq('permission',permission):await supabase.from('membership_permission_overrides').upsert({membership_id:member.id,permission,effect:'allow'});if(result.error)onNotice(result.error.message);else await load()}
+const addGroup=async(e:FormEvent)=>{e.preventDefault();if(!newGroup.trim())return;const{error}=await supabase.from('patient_groups').insert({clinic_id:workspace.clinicId,name:newGroup.trim(),sort_order:(groups.at(-1)?.sort_order||0)+10});if(error)onNotice(error.message);else{setNewGroup('');await load()}}
+const updateGroup=async(group:PatientGroup,patch:Partial<PatientGroup>)=>{const{error}=await supabase.from('patient_groups').update({...patch,updated_at:new Date().toISOString()}).eq('id',group.id).eq('clinic_id',workspace.clinicId);if(error)onNotice(error.message);else await load()}
+const rename=async(group:PatientGroup)=>{const name=window.prompt('Patient group name',group.name)?.trim();if(name&&name!==group.name)await updateGroup(group,{name})};const move=async(index:number,direction:-1|1)=>{const a=groups[index],b=groups[index+direction];if(!a||!b)return;const x=await supabase.from('patient_groups').update({sort_order:b.sort_order}).eq('id',a.id),y=await supabase.from('patient_groups').update({sort_order:a.sort_order}).eq('id',b.id);if(x.error||y.error)onNotice(x.error?.message||y.error?.message||'Could not reorder groups.');else await load()}
+return <section className="admin-page"><div className="hero-row"><div><span className="eyebrow">BRANCH ADMINISTRATION</span><h1>Admin controls</h1><p className="muted">Manage the branch team, availability and access to operational modules.</p></div></div>{!canManage&&<div className="admin-lock"><ShieldCheck size={19}/><div><b>Administrator access required</b><span>Only administrators can make changes.</span></div></div>}<div className="admin-grid"><div className="panel admin-roster"><div className="admin-section-title"><div><span className="eyebrow">SCHEDULING TEAM</span><h2>Clinician & staff roster</h2><p>Add doctors and staff to the branch.</p></div><UsersRound size={22}/></div>{canManage&&<form className="admin-form" onSubmit={add}><label><span>Name</span><input value={values.full_name} onChange={e=>setValues(v=>({...v,full_name:e.target.value}))} required/></label><label><span>Role</span><select value={values.practitioner_role} onChange={e=>setValues(v=>({...v,practitioner_role:e.target.value}))}><option>Doctor</option><option>Specialist</option><option>Visiting consultant</option><option>Hygienist</option><option>Assistant</option><option>Receptionist</option></select></label><label><span>Registration / licence no.</span><input value={values.registration_number} onChange={e=>setValues(v=>({...v,registration_number:e.target.value}))}/></label><label><span>Schedule colour</span><select value={values.schedule_color} onChange={e=>setValues(v=>({...v,schedule_color:e.target.value as Practitioner['schedule_color']}))}><option value="teal">Teal</option><option value="violet">Violet</option><option value="amber">Amber</option></select></label><button className="primary" disabled={saving}><UserPlus size={16}/>{saving?'Adding…':'Add to branch'}</button></form>}<div className="practitioner-list">{loading?<p>Loading clinic controls…</p>:practitioners.map(x=><div className="practitioner-row" key={x.id}><i className={'doctor-swatch '+x.schedule_color}/><div><b>{x.full_name}</b><span>{x.practitioner_role}{x.registration_number?' · Reg. '+x.registration_number:''}</span></div></div>)}</div></div><div className="panel admin-access"><div className="admin-section-title"><div><span className="eyebrow">ACCESSIBILITY</span><h2>Module access</h2><p>Grant operational permissions for each clinic login.</p></div><ShieldCheck size={22}/></div>{memberships.map(member=><div className="access-member" key={member.id}><div><b>{member.role}</b><small>Account · {member.user_id.slice(0,8)}…</small></div><div className="permission-chips">{permissions.map(p=>{const granted=overrides.some(x=>x.membership_id===member.id&&x.permission===p&&x.effect==='allow');return <button disabled={!canManage} key={p} className={granted?'permission-chip active':'permission-chip'} onClick={()=>void toggleOverride(member,p)}>{granted?'Granted':'Role default'} · {p.replace('.',' ')}</button>})}</div></div>)}</div></div><div className="panel admin-patient-groups"><div className="admin-section-title"><div><span className="eyebrow">PATIENT CLASSIFICATION</span><h2>Patient groups / schemes</h2><p>Manage the simple dropdown used in Book appointment.</p></div><ShieldCheck size={22}/></div>{canManage&&<form className="admin-form" onSubmit={addGroup}><label><span>New patient group</span><input value={newGroup} onChange={e=>setNewGroup(e.target.value)} placeholder="e.g. State employee scheme"/></label><button className="primary">Add group</button></form>}<div className="leave-list">{groups.map((g,index)=><div className="leave-row" key={g.id}><div><b>{g.name}</b><span>{g.active?'Available in booking':'Inactive — retained for existing patients'}</span></div>{canManage&&<div><button className="ghost small" onClick={()=>void move(index,-1)} disabled={!index}>↑</button><button className="ghost small" onClick={()=>void move(index,1)} disabled={index===groups.length-1}>↓</button><button className="ghost small" onClick={()=>void rename(g)}>Rename</button><button className="ghost small" onClick={()=>void updateGroup(g,{active:!g.active})}>{g.active?'Deactivate':'Activate'}</button></div>}</div>)}</div></div><div className="panel admin-leave"><div className="admin-section-title"><div><span className="eyebrow">AVAILABILITY</span><h2>Approved leave</h2><p>Review staff leave requests.</p></div><CalendarRange size={22}/></div><div className="leave-list">{leaves.length?leaves.map(x=><div className="leave-row" key={x.id}><div><b>{x.staff_name}</b><span>{x.start_date} – {x.end_date}</span></div><i className={x.status==='approved'?'status active':'status'}>{x.status}</i></div>):<p className="admin-empty">No leave has been recorded for this branch.</p>}</div></div></section>}
