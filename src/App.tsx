@@ -203,29 +203,51 @@ export default function App() {
   useEffect(() => {
     let alive = true
     const begin = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session?.user && alive) await initializeWorkspace(data.session.user)
-      if (alive) setLoading(false)
+      try {
+        const { data, error } = await supabase.auth.getSession()
+        if (error) throw error
+        if (data.session?.user && alive) await initializeWorkspace(data.session.user)
+      } catch (error) {
+        console.error('Clinic initialization failed', error)
+        if (alive) setNotice('Your workspace could not be opened. Please try again.')
+      } finally {
+        if (alive) setLoading(false)
+      }
     }
     begin()
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!alive) return
-      if (session?.user) {
-        setLoading(true)
-        await initializeWorkspace(session.user)
-        if (alive) setLoading(false)
-      } else {
-        setWorkspace(null)
-        setPatients([])
-        setAppointments([])
-        setBranches([])
-        setBranchMetrics([])
-        setEntitlement(null)
-        setLoading(false)
-      }
+    let pendingAuth: ReturnType<typeof setTimeout> | undefined
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive || _event === 'INITIAL_SESSION' || _event === 'TOKEN_REFRESHED') return
+      clearTimeout(pendingAuth)
+      // Return before making authenticated database requests: they may need
+      // the same auth lock that is held while this callback is running.
+      pendingAuth = setTimeout(() => {
+        void (async () => {
+          if (!alive) return
+          try {
+            if (session?.user) {
+              setLoading(true)
+              await initializeWorkspace(session.user)
+            } else {
+              setWorkspace(null)
+              setPatients([])
+              setAppointments([])
+              setBranches([])
+              setBranchMetrics([])
+              setEntitlement(null)
+            }
+          } catch (error) {
+            console.error('Clinic session update failed', error)
+            if (alive) setNotice('Your workspace could not be opened. Please try again.')
+          } finally {
+            if (alive) setLoading(false)
+          }
+        })()
+      }, 0)
     })
     return () => {
       alive = false
+      clearTimeout(pendingAuth)
       listener.subscription.unsubscribe()
     }
   }, [initializeWorkspace])
