@@ -345,11 +345,21 @@ export default function App() {
     setNotice('Patient record created and appointment confirmed. Complete the clinical file when the patient arrives.')
   }
   const saveClinicalFile = async (patientId: string, values: Record<string, string>) => {
-    if (!workspace) return
-  const { data, error } = await supabase.from('patients').update({ ...values, weight_kg: values.weight_kg ? Number(values.weight_kg) : null, updated_at: new Date().toISOString() }).eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
-    if (error) { setNotice(error.message); return }
+    if (!workspace) throw new Error('Your clinic session is unavailable. Please reopen the workspace.')
+    const weightText = values.weight_kg.trim()
+    const weight = weightText ? Number(weightText) : null
+    if (weight !== null && (!Number.isFinite(weight) || weight <= 0)) {
+      throw new Error('Enter a valid weight in kilograms, or leave it blank.')
+    }
+    const { data, error } = await supabase.from('patients')
+      .update({ ...values, weight_kg: weight, updated_at: new Date().toISOString() })
+      .eq('id', patientId).eq('clinic_id', workspace.clinicId).select().single()
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('The clinical file was not saved. Check your access and try again.')
     setPatients(current => current.map(patient => patient.id === patientId ? data as Patient : patient))
     setNotice('Clinical file saved.')
+    setAppointmentSlot(null)
+    navigateTo('appointments')
   }
 
   const switchBranch = async (branch: Branch) => {
@@ -771,6 +781,23 @@ function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patie
   const initial = () => ({ weight_kg: patient.weight_kg?.toString() || '', blood_pressure: patient.blood_pressure || '', current_medications: patient.current_medications || '', illness_history: patient.illness_history || patient.medical_history || '', allergies: patient.allergies || '', major_surgeries: patient.major_surgeries || '', chief_complaint: patient.chief_complaint || '', history_present_illness: patient.history_present_illness || '', investigations_advised: patient.investigations_advised || '', clinical_findings: patient.clinical_findings || '', primary_diagnosis: patient.primary_diagnosis || '', final_diagnosis: patient.final_diagnosis || '' })
   const [values, setValues] = useState(initial)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const saveInProgress = useRef(false)
+  const submitClinicalFile = async (event: FormEvent) => {
+    event.preventDefault()
+    if (saveInProgress.current) return
+    saveInProgress.current = true
+    setSaving(true)
+    setSaveError('')
+    try {
+      await onSave(patient.id, values)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'The clinical file could not be saved. Please try again.')
+    } finally {
+      saveInProgress.current = false
+      setSaving(false)
+    }
+  }
   const [customSuggestion, setCustomSuggestion] = useState({ investigations_advised: '', clinical_findings: '' })
   const [addingCustom, setAddingCustom] = useState({ investigations_advised: false, clinical_findings: false })
   const set = (key: string, value: string) => setValues(current => ({ ...current, [key]: value }))
@@ -825,7 +852,8 @@ function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patie
       </nav>
     </aside>
 
-    <form className="clinical-file-form" onSubmit={async event => { event.preventDefault(); setSaving(true); await onSave(patient.id, values); setSaving(false) }}>
+    <div className="clinical-file-form">
+      <form id="clinical-assessment-form" onSubmit={submitClinicalFile}>
       <div className="clinical-file-intro">
         <div>
           <span className="eyebrow">TODAY'S CONSULTATION</span>
@@ -876,13 +904,15 @@ function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patie
         </div>
       </section>
 
+      </form>
       <TreatmentPlan patient={patient} workspace={workspace} onNotice={onNotice} />
 
+      {saveError && <div className="notice" role="alert">{saveError}</div>}
       <div className="clinical-action-bar">
-        <div><strong>Ready to continue?</strong><span>Save this assessment before continuing the treatment plan.</span></div>
-        <div><button className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
+        <div><strong>Ready to continue?</strong><span>Save this assessment and return to appointments.</span></div>
+        <div><button type="submit" form="clinical-assessment-form" className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
       </div>
-    </form>
+    </div>
   </div>
 }
 const smartSuggestions: Record<string, string[]> = {
