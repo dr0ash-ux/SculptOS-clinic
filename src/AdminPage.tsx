@@ -13,6 +13,11 @@ import {
 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import {
+  loadClinicLetterhead,
+  loadClinicLogo,
+  uploadClinicLogo,
+} from "./clinicLetterhead";
+import {
   colourHex,
   permissionDependencies,
   permissionGroups,
@@ -851,50 +856,138 @@ function ClinicSetup({
   onSaved: (s: ClinicSchedule, n: string) => void;
 }) {
   const [name, setName] = useState(workspace.clinicName),
+    [address, setAddress] = useState(""),
+    [phone, setPhone] = useState(""),
+    [logoPath, setLogoPath] = useState<string | null>(null),
+    [logoUrl, setLogoUrl] = useState(""),
+    [file, setFile] = useState<File | null>(null),
+    [preview, setPreview] = useState(""),
+    [removeLogo, setRemoveLogo] = useState(false),
     [draft, setDraft] = useState(schedule),
     [busy, setBusy] = useState(false),
+    [loading, setLoading] = useState(true),
+    [loaded, setLoaded] = useState(false),
+    [revision, setRevision] = useState(0),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setLoaded(false);
+    setError("");
+    (async () => {
+      try {
+        const profile = await loadClinicLetterhead(workspace.clinicId);
+        if (!alive) return;
+        setName(profile.name);
+        setAddress(profile.address);
+        setPhone(profile.phone);
+        setLogoPath(profile.logo_path);
+        if (profile.logo_path) {
+          try {
+            const url = await loadClinicLogo(profile.logo_path);
+            if (alive) setLogoUrl(url);
+            else URL.revokeObjectURL(url);
+          } catch {
+            if (alive)
+              setError(
+                "The saved logo could not be loaded. Upload a replacement if needed.",
+              );
+          }
+        }
+        if (alive) setLoaded(true);
+      } catch (e) {
+        if (alive) setError((e as Error).message);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workspace.clinicId, revision]);
+  useEffect(
+    () => () => {
+      if (logoUrl) URL.revokeObjectURL(logoUrl);
+    },
+    [logoUrl],
+  );
+  useEffect(() => {
+    if (!file) {
+      setPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (busy || !loaded) return;
+    setError("");
+    setMessage("");
+    if (draft.close <= draft.open) {
+      setError("Closing time must be after opening time.");
+      return;
+    }
+    setBusy(true);
+    let uploaded: string | null = null;
+    try {
+      if (file) uploaded = await uploadClinicLogo(workspace.clinicId, file);
+      const path = removeLogo ? null : uploaded || logoPath;
+      const r = await supabase.rpc("save_clinic_profile", {
+        target_clinic: workspace.clinicId,
+        clinic_name: name.trim(),
+        opens: draft.open,
+        closes: draft.close,
+        closed_days: draft.closedDays,
+        clinic_address: address.trim(),
+        clinic_phone: phone.trim(),
+        clinic_logo_path: path,
+      });
+      if (r.error) throw r.error;
+      setLogoPath(path);
+      if (file) setLogoUrl(URL.createObjectURL(file));
+      if (removeLogo) setLogoUrl("");
+      setFile(null);
+      setRemoveLogo(false);
+      onSaved(draft, name.trim());
+      setMessage(
+        "Clinic details saved. Prescriptions will use this letterhead.",
+      );
+      uploaded = null;
+    } catch (e) {
+      setError((e as Error).message);
+      if (uploaded)
+        await supabase.storage
+          .from("clinic-logos")
+          .remove([uploaded])
+          .catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <form
-      className="control-card"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        setError("");
-        setMessage("");
-        if (draft.close <= draft.open) {
-          setError("Closing time must be after opening time.");
-          return;
-        }
-        setBusy(true);
-        try {
-          const { error } = await supabase.rpc("save_clinic_settings", {
-            target_clinic: workspace.clinicId,
-            clinic_name: name.trim(),
-            opens: draft.open,
-            closes: draft.close,
-            closed_days: draft.closedDays,
-          });
-          if (error) throw error;
-          onSaved(draft, name.trim());
-          setMessage("Clinic settings saved for the whole team.");
-        } catch (e) {
-          setError((e as Error).message);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
+    <form className="control-card" onSubmit={save}>
       <div className="control-card-heading">
         <Settings2 size={21} />
         <div>
           <h2>Clinic identity & working hours</h2>
-          <p>Shared by everyone in this clinic.</p>
+          <p>Contact details and logo appear on prescriptions.</p>
         </div>
       </div>
       {error && (
         <p className="controls-alert error" role="alert">
           {error}
+          {!loaded && !loading && (
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setRevision((v) => v + 1)}
+            >
+              Retry
+            </button>
+          )}
         </p>
       )}
       {message && (
@@ -902,59 +995,136 @@ function ClinicSetup({
           {message}
         </p>
       )}
-      <div className="control-fields">
-        <label className="span-all">
-          Clinic name
-          <input
-            required
-            minLength={2}
-            maxLength={120}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </label>
-        <label>
-          Opens at
-          <input
-            type="time"
-            required
-            value={draft.open}
-            onChange={(e) => setDraft({ ...draft, open: e.target.value })}
-          />
-        </label>
-        <label>
-          Closes at
-          <input
-            type="time"
-            required
-            value={draft.close}
-            onChange={(e) => setDraft({ ...draft, close: e.target.value })}
-          />
-        </label>
-      </div>
-      <fieldset className="closed-days">
-        <legend>Weekly closed days</legend>
-        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, i) => (
-          <label key={day}>
+      {loading && <p role="status">Loading clinic details…</p>}
+      <fieldset
+        className="clinic-profile-fields"
+        disabled={loading || busy || !loaded}
+      >
+        <div className="control-fields">
+          <label className="span-all">
+            Clinic name
             <input
-              type="checkbox"
-              checked={draft.closedDays.includes(i)}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  closedDays: e.target.checked
-                    ? [...draft.closedDays, i]
-                    : draft.closedDays.filter((d) => d !== i),
-                })
-              }
+              required
+              minLength={2}
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
-            {day}
           </label>
-        ))}
+          <div className="clinic-logo-field span-all">
+            <div className="clinic-logo-preview">
+              {!removeLogo && (preview || logoUrl) ? (
+                <img src={preview || logoUrl} alt="Clinic logo preview" />
+              ) : (
+                <span>Clinic logo</span>
+              )}
+            </div>
+            <div>
+              <label>
+                Upload clinic logo
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const picked = e.target.files?.[0];
+                    if (!picked) return;
+                    if (
+                      !["image/png", "image/jpeg", "image/webp"].includes(
+                        picked.type,
+                      ) ||
+                      picked.size > 1048576
+                    ) {
+                      setError(
+                        "Choose a PNG, JPG or WebP no larger than 1 MB.",
+                      );
+                      e.target.value = "";
+                      return;
+                    }
+                    setFile(picked);
+                    e.target.value = "";
+                    setRemoveLogo(false);
+                    setError("");
+                  }}
+                />
+              </label>
+              <small>PNG, JPG or WebP · up to 1 MB</small>
+              {(logoPath || file) && (
+                <button
+                  className="ghost"
+                  type="button"
+                  onClick={() => {
+                    setRemoveLogo(true);
+                    setFile(null);
+                  }}
+                >
+                  Remove logo
+                </button>
+              )}
+            </div>
+          </div>
+          <label className="span-all">
+            Clinic address
+            <textarea
+              rows={2}
+              maxLength={500}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Street, locality, city and PIN code"
+            />
+          </label>
+          <label className="span-all">
+            Clinic phone number
+            <input
+              type="tel"
+              maxLength={60}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Phone number for patient enquiries"
+            />
+          </label>
+          <label>
+            Opens at
+            <input
+              type="time"
+              required
+              value={draft.open}
+              onChange={(e) => setDraft({ ...draft, open: e.target.value })}
+            />
+          </label>
+          <label>
+            Closes at
+            <input
+              type="time"
+              required
+              value={draft.close}
+              onChange={(e) => setDraft({ ...draft, close: e.target.value })}
+            />
+          </label>
+        </div>
+        <fieldset className="closed-days">
+          <legend>Weekly closed days</legend>
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, i) => (
+            <label key={day}>
+              <input
+                type="checkbox"
+                checked={draft.closedDays.includes(i)}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    closedDays: e.target.checked
+                      ? [...draft.closedDays, i]
+                      : draft.closedDays.filter((d) => d !== i),
+                  })
+                }
+              />
+              {day}
+            </label>
+          ))}
+        </fieldset>
       </fieldset>
       <footer className="control-footer">
         <span>Times follow this clinic’s timezone.</span>
-        <button className="primary" disabled={busy}>
+        <button className="primary" disabled={busy || loading || !loaded}>
           {busy ? "Saving…" : "Save clinic settings"}
         </button>
       </footer>

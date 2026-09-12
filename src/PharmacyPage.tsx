@@ -14,6 +14,8 @@ export type Medicine = {
   category: string;
   route: string;
   adult_reference: string;
+  default_dose: string;
+  frequency: string;
   instructions: string;
   cautions: string;
   source_url?: string;
@@ -161,20 +163,10 @@ export function PharmacyPage({
           </div>
         </div>
       )}
-      <div className="pharmacy-reference-note">
-        Adult reference regimens from SDCEP dental guidance and manufacturer
-        information. Confirm local product strength, patient suitability and
-        duration before prescribing. Antibiotics require a clinical indication;
-        they do not replace dental treatment.{" "}
-        <a
-          href="https://www.ada.org/resources/ada-library/oral-health-topics/oral-analgesics-for-acute-dental-pain"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Read the ADA dental pain review
-        </a>
-        .
-      </div>
+      <p className="pharmacy-muted">
+        Adult presets · OD once daily · BID twice daily · TID three times daily
+        · QID four times daily · PRN as needed.
+      </p>
       <div className="pharmacy-filters">
         <label>
           <Search size={16} />
@@ -216,88 +208,58 @@ export function PharmacyPage({
           <p>No medicines match this view.</p>
         </div>
       ) : (
-        <div className="medicine-list">
-          {visible.map((m) => (
-            <article className="medicine-card" key={m.key}>
-              <div className="medicine-summary">
-                <div className="medicine-icon">
-                  <Pill size={20} />
-                </div>
-                <div>
-                  <h2>
-                    {m.name} <span>{m.strength}</span>
-                  </h2>
-                  <p>
-                    {m.form} · {m.route}
-                  </p>
-                  <span className="medicine-tag">{m.category}</span>
-                  <span className="medicine-origin">
-                    {m.code
-                      ? "Reference medicine"
-                      : m.active
-                        ? "Clinic medicine"
-                        : "Archived"}
-                  </span>
-                </div>
-                {m.id && manage && (
-                  <button className="ghost" onClick={() => setEdit(m)}>
-                    Edit
-                  </button>
-                )}
-              </div>
-              <div className="medicine-details">
-                <div>
-                  <h3>Adult dose reference</h3>
-                  <p>
-                    {m.adult_reference ||
-                      "Prescriber to specify an appropriate dose."}
-                  </p>
-                </div>
-                <div>
-                  <h3>Administration</h3>
-                  <p>
-                    {m.instructions || "Prescriber to specify instructions."}
-                  </p>
-                </div>
-              </div>
-              <details>
-                <summary>Clinical notes & source</summary>
-                <p>
-                  {m.cautions ||
-                    "Review allergies, interactions and patient suitability."}
-                </p>
-                {m.source_url ? (
-                  <a href={m.source_url} target="_blank" rel="noreferrer">
-                    <ExternalLink size={13} />
-                    {m.source_label} · reviewed {m.reviewed_on}
-                  </a>
-                ) : (
-                  <p>
-                    Clinic-authored medicine. Verify against the product
-                    information.
-                  </p>
-                )}
-                {m.code === "metronidazole-400" && (
-                  <a
-                    href="https://www.nhs.uk/medicines/metronidazole/common-questions-about-metronidazole/"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    NHS · alcohol advice
-                  </a>
-                )}
-                {m.code === "chlorhexidine-02" && (
-                  <a
-                    href="https://www.nhs.uk/medicines/chlorhexidine/how-and-when-to-use-chlorhexidine/"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    NHS · administration advice
-                  </a>
-                )}
-              </details>
-            </article>
-          ))}
+        <div className="medicine-table-wrap">
+          <table className="medicine-table">
+            <thead>
+              <tr>
+                <th>Medicine</th>
+                <th>Dose</th>
+                <th>Route</th>
+                <th>Frequency</th>
+                <th>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((m) => (
+                <tr key={m.key}>
+                  <td>
+                    <b>{m.name}</b>
+                    <small>
+                      {m.strength} · {m.form}
+                      {!m.active ? " · Archived" : ""}
+                    </small>
+                  </td>
+                  <td>{m.default_dose || "Set dose"}</td>
+                  <td>{m.route}</td>
+                  <td>
+                    <span className="medicine-tag">
+                      {m.frequency || "Set frequency"}
+                    </span>
+                  </td>
+                  <td>
+                    {m.source_url && (
+                      <a
+                        href={m.source_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Source for ${m.name}`}
+                        title="Prescribing reference"
+                      >
+                        <ExternalLink size={15} />
+                      </a>
+                    )}
+                    {m.id && manage && (
+                      <button className="ghost" onClick={() => setEdit(m)}>
+                        Edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {edit !== undefined && (
@@ -340,7 +302,8 @@ export function MedicineForm({
         "form",
         "category",
         "route",
-        "adult_reference",
+        "default_dose",
+        "frequency",
         "instructions",
         "cautions",
       ].map((k) => [k, String(f.get(k) || "").trim()]),
@@ -405,7 +368,6 @@ export function MedicineForm({
                 "e.g. 500 mg or 100 mg/5 mL",
               ],
               ["form", "Dosage form", "Tablet, capsule, suspension…"],
-              ["route", "Route", "Oral, mouth rinse, topical…"],
             ].map(([key, label, placeholder]) => (
               <label key={key}>
                 {label}
@@ -420,6 +382,53 @@ export function MedicineForm({
                 />
               </label>
             ))}
+            <label>
+              Route
+              <select name="route" defaultValue={medicine?.route || "Oral"}>
+                {Array.from(
+                  new Set(
+                    [
+                      "Oral",
+                      "IV",
+                      "IM",
+                      "Topical",
+                      "Mouth rinse",
+                      "Oromucosal",
+                      medicine?.route,
+                    ].filter(Boolean),
+                  ),
+                ).map((route) => (
+                  <option key={route}>{route}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Dose per administration
+              <input
+                name="default_dose"
+                defaultValue={medicine?.default_dose || ""}
+                placeholder="e.g. 500 mg (1 tablet)"
+                maxLength={120}
+                required
+              />
+            </label>
+            <label>
+              Frequency
+              <select
+                name="frequency"
+                defaultValue={medicine?.frequency || ""}
+                required
+              >
+                <option value="" disabled>
+                  Select frequency
+                </option>
+                {Object.entries(frequencyLabels).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {code} · {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="span-all">
               Category
               <select
@@ -438,7 +447,6 @@ export function MedicineForm({
               </select>
             </label>
             {[
-              ["adult_reference", "Adult dose reference (optional)"],
               ["instructions", "Administration instructions"],
               ["cautions", "Clinical notes / cautions"],
             ].map(([key, label]) => (
@@ -483,3 +491,13 @@ export function MedicineForm({
     </ControlDialog>
   );
 }
+
+export const frequencyLabels: Record<string, string> = {
+  OD: "Once daily",
+  BID: "Twice daily",
+  TID: "Three times daily",
+  QID: "Four times daily",
+  PRN: "As needed",
+};
+export const medicineOption = (m: Medicine) =>
+  `${m.name} · ${m.default_dose || m.strength} · ${m.route} · ${m.frequency || "Set frequency"}`;

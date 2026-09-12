@@ -5,6 +5,8 @@ import { supabase } from "./lib/supabase";
 import { usePermission, Workspace } from "./clinicAccess";
 import {
   fullName,
+  frequencyLabels,
+  medicineOption,
   loadMedicines,
   Medicine,
   MedicineForm,
@@ -12,6 +14,11 @@ import {
   RxPatient,
 } from "./PharmacyPage";
 import "./Pharmacy.css";
+import {
+  ClinicLetterhead,
+  loadClinicLetterhead,
+  loadClinicLogo,
+} from "./clinicLetterhead";
 type RxItem = {
   medicine_key: string;
   name: string;
@@ -62,6 +69,36 @@ export function PrescriptionPage({
     [saving, setSaving] = useState(false),
     [adding, setAdding] = useState(false),
     [reload, setReload] = useState(0);
+  const [letterhead, setLetterhead] = useState<ClinicLetterhead | null>(null),
+    [logoUrl, setLogoUrl] = useState(""),
+    [brandingBusy, setBrandingBusy] = useState(true),
+    [brandingError, setBrandingError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    let url = "";
+    setBrandingBusy(true);
+    setBrandingError("");
+    (async () => {
+      try {
+        const details = await loadClinicLetterhead(workspace.clinicId);
+        if (details.logo_path) url = await loadClinicLogo(details.logo_path);
+        if (alive) {
+          setLetterhead(details);
+          setLogoUrl(url);
+        }
+      } catch (e) {
+        if (alive) setBrandingError(pharmacyError(e));
+      } finally {
+        if (alive) setBrandingBusy(false);
+        else if (url) URL.revokeObjectURL(url);
+      }
+    })();
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [workspace.clinicId, reload]);
+  const printReady = !!letterhead && !brandingBusy && !brandingError;
   const write = usePermission("prescriptions.write"),
     manage = usePermission("pharmacy.manage"),
     pharmacyView = usePermission("pharmacy.view"),
@@ -108,9 +145,9 @@ export function PrescriptionPage({
   useEffect(() => {
     document.body.classList.toggle(
       "prescription-print-ready",
-      !!saved && !dirty && !saving,
+      !!saved && !dirty && !saving && printReady,
     );
-  }, [saved, dirty, saving]);
+  }, [saved, dirty, saving, printReady]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -178,7 +215,7 @@ export function PrescriptionPage({
         setHistory((h) => [r.data, ...h]);
         setSaving(false);
       });
-      if (print) {
+      if (print && printReady) {
         document.body.classList.add("prescription-print-ready");
         window.print();
       }
@@ -241,6 +278,14 @@ export function PrescriptionPage({
           duration below.
         </p>
       </div>
+      {brandingError && (
+        <div className="control-alert error" role="alert">
+          Clinic letterhead could not be loaded: {brandingError}
+          <button className="ghost" onClick={() => setReload((v) => v + 1)}>
+            Retry letterhead
+          </button>
+        </div>
+      )}
       {error && (
         <div className="control-alert error" role="alert">
           {error}
@@ -352,8 +397,7 @@ export function PrescriptionPage({
                         )
                         .map((m) => (
                           <option key={m.key} value={m.key}>
-                            {m.name} · {m.strength} · {m.form}
-                            {m.id ? " · Clinic" : ""}
+                            {medicineOption(m)}
                           </option>
                         ))}
                     </select>
@@ -378,14 +422,7 @@ export function PrescriptionPage({
                   )}
                 </div>
                 {picked && (
-                  <div className="rx-reference">
-                    <b>Adult reference · {picked.name}</b>
-                    <p>
-                      {picked.adult_reference ||
-                        "Clinic medicine: confirm the dose from product information."}
-                    </p>
-                    <p>{picked.cautions}</p>
-                  </div>
+                  <p className="rx-reference">{medicineOption(picked)}</p>
                 )}
                 {!items.length && (
                   <div className="pharmacy-empty">
@@ -431,16 +468,64 @@ export function PrescriptionPage({
                       ].map(([key, label, placeholder]) => (
                         <label key={key}>
                           {label}
-                          <input
-                            aria-label={`${label} for medicine ${i + 1}`}
-                            required
-                            maxLength={200}
-                            value={m[key as keyof RxItem]}
-                            placeholder={placeholder}
-                            onChange={(e) =>
-                              change(i, key as keyof RxItem, e.target.value)
-                            }
-                          />
+                          {key === "frequency" ? (
+                            <select
+                              aria-label={`${label} for medicine ${i + 1}`}
+                              required
+                              value={m.frequency}
+                              onChange={(e) =>
+                                change(i, "frequency", e.target.value)
+                              }
+                            >
+                              <option value="" disabled>
+                                Select frequency
+                              </option>
+                              {Object.entries(frequencyLabels).map(
+                                ([code, text]) => (
+                                  <option key={code} value={code}>
+                                    {code} · {text}
+                                  </option>
+                                ),
+                              )}
+                              {m.frequency && !frequencyLabels[m.frequency] && (
+                                <option>{m.frequency}</option>
+                              )}
+                            </select>
+                          ) : key === "route" ? (
+                            <select
+                              aria-label={`${label} for medicine ${i + 1}`}
+                              required
+                              value={m.route}
+                              onChange={(e) =>
+                                change(i, "route", e.target.value)
+                              }
+                            >
+                              {Array.from(
+                                new Set([
+                                  "Oral",
+                                  "IV",
+                                  "IM",
+                                  "Topical",
+                                  "Mouth rinse",
+                                  "Oromucosal",
+                                  m.route,
+                                ]),
+                              ).map((route) => (
+                                <option key={route}>{route}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              aria-label={`${label} for medicine ${i + 1}`}
+                              required
+                              maxLength={200}
+                              value={m[key as keyof RxItem]}
+                              placeholder={placeholder}
+                              onChange={(e) =>
+                                change(i, key as keyof RxItem, e.target.value)
+                              }
+                            />
+                          )}
                         </label>
                       ))}
                       <label className="span-all">
@@ -471,7 +556,9 @@ export function PrescriptionPage({
                   </button>
                   <button
                     className="primary"
-                    disabled={!items.length || (!dirty && !!saved)}
+                    disabled={
+                      !items.length || (!dirty && !!saved) || !printReady
+                    }
                     type="submit"
                     value="print"
                   >
@@ -488,14 +575,18 @@ export function PrescriptionPage({
                 <h2>Saved patient copy</h2>
                 <button
                   className="primary"
-                  disabled={saving}
-                  onClick={() => window.print()}
+                  disabled={saving || !printReady}
+                  onClick={() => printReady && window.print()}
                 >
                   <Printer size={16} />
                   Print prescription
                 </button>
               </div>
-              <PrescriptionPaper prescription={saved} />
+              <PrescriptionPaper
+                prescription={saved}
+                letterhead={letterhead}
+                logoUrl={logoUrl}
+              />
             </>
           ) : (
             <p className="pharmacy-muted">
@@ -519,8 +610,12 @@ export function PrescriptionPage({
       )}
       {createPortal(
         <div className="rx-print-root">
-          {saved && !dirty && !saving ? (
-            <PrescriptionPaper prescription={saved} />
+          {saved && !dirty && !saving && printReady ? (
+            <PrescriptionPaper
+              prescription={saved}
+              letterhead={letterhead}
+              logoUrl={logoUrl}
+            />
           ) : (
             <p>Save the prescription before printing.</p>
           )}
@@ -532,15 +627,31 @@ export function PrescriptionPage({
 }
 function PrescriptionPaper({
   prescription: r,
+  letterhead,
+  logoUrl,
 }: {
   prescription: Prescription;
+  letterhead: ClinicLetterhead | null;
+  logoUrl: string;
 }) {
   return (
     <article className="rx-paper" aria-label="Printable prescription">
       <header>
-        <div>
-          <b>{r.clinic_name}</b>
-          <h2>Prescription</h2>
+        <div className="rx-letterhead">
+          {logoUrl && (
+            <img
+              src={logoUrl}
+              alt={`${letterhead?.name || r.clinic_name} logo`}
+            />
+          )}
+          <div>
+            <b>{letterhead?.name || r.clinic_name}</b>
+            {letterhead?.address && (
+              <p className="rx-clinic-address">{letterhead.address}</p>
+            )}
+            {letterhead?.phone && <p>Tel: {letterhead.phone}</p>}
+            <h2>Prescription</h2>
+          </div>
         </div>
         <span>{r.prescribed_on}</span>
       </header>
@@ -559,7 +670,11 @@ function PrescriptionPaper({
               <b>Dose:</b> {m.dose} · <b>Route:</b> {m.route}
             </p>
             <p>
-              <b>Frequency:</b> {m.frequency} · <b>Duration:</b> {m.duration}
+              <b>Frequency:</b> {m.frequency}
+              {frequencyLabels[m.frequency]
+                ? ` (${frequencyLabels[m.frequency].toLowerCase()})`
+                : ""}{" "}
+              · <b>Duration:</b> {m.duration}
             </p>
             <p>{m.instructions}</p>
           </li>
