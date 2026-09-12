@@ -318,14 +318,15 @@
   padding-left: 22px;
 }
 .rx-paper li {
-  padding: 12px 0;
+  padding: 8px 0;
   border-bottom: 1px solid #e6ece7;
   break-inside: avoid;
   overflow-wrap: anywhere;
 }
 .rx-paper li h3 {
   font-size: 15px;
-  margin: 0 0 6px;
+  margin: 0 0 3px;
+  font-weight: 500;
 }
 .rx-paper li h3 small {
   font-size: 12px;

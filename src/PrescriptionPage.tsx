@@ -14,6 +14,7 @@ import {
   RxPatient,
 } from "./PharmacyPage";
 import "./Pharmacy.css";
+import { patientAge, mealTiming, dosageForm } from "./prescriptionPrint";
 import {
   ClinicLetterhead,
   loadClinicLetterhead,
@@ -29,6 +30,7 @@ type RxItem = {
   frequency: string;
   duration: string;
   instructions: string;
+  print_timing?: string;
 };
 type Prescription = {
   id: string;
@@ -177,6 +179,7 @@ export function PrescriptionPage({
         frequency: "",
         duration: "",
         instructions: m.instructions,
+        print_timing: mealTiming(m.instructions),
       },
     ]);
     setSelected("");
@@ -291,6 +294,12 @@ export function PrescriptionPage({
             Refresh
           </button>
         </div>
+      )}
+      {letterhead && (!letterhead.address || !letterhead.phone) && (
+        <p className="pharmacy-muted">
+          Add the clinic address and phone in Admin controls → Clinic setup to
+          include them on this prescription.
+        </p>
       )}
       {loading ? (
         <p role="status">Loading prescription records…</p>
@@ -503,7 +512,7 @@ export function PrescriptionPage({
                               aria-label={`${label} for medicine ${i + 1}`}
                               required
                               maxLength={200}
-                              value={m[key as keyof RxItem]}
+                              value={m[key as keyof RxItem] || ""}
                               placeholder={placeholder}
                               onChange={(e) =>
                                 change(i, key as keyof RxItem, e.target.value)
@@ -513,7 +522,19 @@ export function PrescriptionPage({
                         </label>
                       ))}
                       <label className="span-all">
-                        Instructions · how to take / use
+                        Printed meal timing
+                        <input
+                          aria-label={`Printed meal timing for medicine ${i + 1}`}
+                          maxLength={100}
+                          placeholder="e.g. After meals"
+                          value={m.print_timing ?? mealTiming(m.instructions)}
+                          onChange={(e) =>
+                            change(i, "print_timing", e.target.value)
+                          }
+                        />
+                      </label>
+                      <label className="span-all">
+                        Clinical instructions · not printed
                         <textarea
                           required
                           maxLength={1000}
@@ -570,6 +591,7 @@ export function PrescriptionPage({
                 prescription={saved}
                 letterhead={letterhead}
                 logoUrl={logoUrl}
+                patient={patient}
               />
             </>
           ) : (
@@ -599,6 +621,7 @@ export function PrescriptionPage({
               prescription={saved}
               letterhead={letterhead}
               logoUrl={logoUrl}
+              patient={patient}
             />
           ) : (
             <p>Save the prescription before printing.</p>
@@ -613,7 +636,9 @@ function PrescriptionPaper({
   prescription: r,
   letterhead,
   logoUrl,
+  patient,
 }: {
+  patient: RxPatient;
   prescription: Prescription;
   letterhead: ClinicLetterhead | null;
   logoUrl: string;
@@ -641,26 +666,26 @@ function PrescriptionPaper({
       </header>
       <div className="rx-patient">
         <b>{r.patient_name}</b>
-        <span>{r.patient_number}</span>
+        <span>ID: {r.patient_number}</span>
+        <span>Age: {patientAge(patient.date_of_birth, r.prescribed_on)}</span>
+        <span>Sex: {patient.sex || "Not recorded"}</span>
+        {patient.phone && <span>Phone: {patient.phone}</span>}
         <span>Dr: {r.prescriber_name.replace(/^Dr\.?\s*/i, "")}</span>
       </div>
       <ol>
         {r.items.map((m, i) => (
           <li key={i}>
             <h3>
-              {m.name} — {m.strength} <small>{m.form}</small>
+              {dosageForm(m.form)} {m.name} {m.strength}
+              {m.dose.trim().toLowerCase() !==
+                m.strength.trim().toLowerCase() && ` · ${m.dose}`}
+              {m.route !== "Oral" && ` (${m.route})`}
+              {(m.print_timing ?? mealTiming(m.instructions)) &&
+                ` — ${m.print_timing ?? mealTiming(m.instructions)}`}
             </h3>
             <p>
-              <b>Dose:</b> {m.dose} · <b>Route:</b> {m.route}
+              {frequencyLabels[m.frequency] || m.frequency} — {m.duration}
             </p>
-            <p>
-              <b>Frequency:</b> {m.frequency}
-              {frequencyLabels[m.frequency]
-                ? ` (${frequencyLabels[m.frequency].toLowerCase()})`
-                : ""}{" "}
-              · <b>Duration:</b> {m.duration}
-            </p>
-            <p>{m.instructions}</p>
           </li>
         ))}
       </ol>

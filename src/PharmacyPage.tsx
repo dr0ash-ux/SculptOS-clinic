@@ -30,6 +30,8 @@ export type RxPatient = {
   patient_title: string | null;
   patient_number: string;
   date_of_birth: string | null;
+  sex?: string | null;
+  phone?: string | null;
   allergies?: string | null;
   current_medications?: string | null;
   medical_history?: string | null;
