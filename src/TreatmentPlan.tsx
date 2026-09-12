@@ -5,11 +5,19 @@ import { CatalogueItem, PricingWorkspace } from './TreatmentPricing'
 import { supabase } from './lib/supabase'
 import './TreatmentPlan.css'
 
-type Patient = { id: string; patient_number: string; patient_title: string | null; first_name: string; last_name: string | null; sex: string | null; phone: string | null; payer_group: string | null; final_diagnosis: string | null; primary_diagnosis: string | null }
+type Patient = { id: string; patient_number: string; patient_title: string | null; first_name: string; last_name: string | null; date_of_birth: string | null; chief_complaint: string | null; sex: string | null; phone: string | null; payer_group: string | null; final_diagnosis: string | null; primary_diagnosis: string | null }
 type Plan = { id: string; additional_adjustment: number | null }
 type Item = { id: string; treatment_catalogue_id: string | null; treatment_name_snapshot: string; tooth_or_region: string | null; quantity: number; unit_price_snapshot: number; discount_percent: number; discount_amount: number; final_price: number; status: string; custom_price: boolean; price_adjustment_reason: string | null }
 const statuses = ['Planned', 'Accepted', 'In Progress', 'Completed', 'Deferred', 'Cancelled']
 const money = (value: number) => `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+function patientAge(dateOfBirth: string | null, today = new Date()) {
+  if (!dateOfBirth) return 'Not recorded'
+  const birth = new Date(`${dateOfBirth}T00:00:00`)
+  if (!Number.isFinite(birth.getTime()) || birth > today) return 'Not recorded'
+  let years = today.getFullYear() - birth.getFullYear()
+  if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) years--
+  return `${years} ${years === 1 ? 'year' : 'years'}`
+}
 const round = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 const priceItem = (item: Item): Item => {
   const subtotal = round(item.unit_price_snapshot * item.quantity)
@@ -169,8 +177,10 @@ export function TreatmentPlan({ patient, workspace, clinicianName, onNotice, onB
     <div className="patient-copy-caption"><span className="eyebrow">PATIENT COPY</span><span>{dirty ? 'Preview · save before printing' : 'Print or save as PDF using Save & print plan'}</span></div>
     <article className="treatment-print-document" aria-label="Patient treatment plan">
       <header className="treatment-print-header"><div><span className="eyebrow">{workspace.clinicName}</span><h2>Treatment plan & estimate</h2></div><div><span>{printedDate}</span><b>{patient.patient_number}</b></div></header>
-      <dl className="treatment-print-patient"><div><dt>Patient</dt><dd>{name}</dd></div><div><dt>Prepared by</dt><dd>{clinicianName}</dd></div><div><dt>Phone</dt><dd>{patient.phone || '—'}</dd></div><div><dt>Patient group / scheme</dt><dd>{patient.payer_group || 'Self Pay'}</dd></div></dl>
-      {(patient.final_diagnosis || patient.primary_diagnosis) && <div className="treatment-print-diagnosis"><b>{patient.final_diagnosis ? 'Diagnosis' : 'Provisional diagnosis'}</b><p>{patient.final_diagnosis || patient.primary_diagnosis}</p></div>}
+      <dl className="treatment-print-patient"><div><dt>Patient</dt><dd>{name}</dd></div><div><dt>Prepared by</dt><dd>{clinicianName}</dd></div><div><dt>Age</dt><dd>{patientAge(patient.date_of_birth)}</dd></div><div><dt>Sex</dt><dd>{patient.sex || 'Not recorded'}</dd></div><div><dt>Phone</dt><dd>{patient.phone || '—'}</dd></div><div><dt>Patient group / scheme</dt><dd>{patient.payer_group || 'Self Pay'}</dd></div></dl>
+      <div className="treatment-print-diagnosis"><b>Chief complaint</b><p>{patient.chief_complaint || 'Not recorded'}</p></div>
+      <div className="treatment-print-diagnosis"><b>{!patient.final_diagnosis && patient.primary_diagnosis ? 'Provisional diagnosis' : 'Diagnosis'}</b><p>{patient.final_diagnosis || patient.primary_diagnosis || 'Not recorded'}</p></div>
+      <h3>Treatment plan</h3>
       <div className="treatment-print-table-wrap"><table className="treatment-print-table"><thead><tr><th scope="col">Treatment / region</th><th scope="col">Qty</th><th scope="col">Unit price</th><th scope="col">Discount</th><th scope="col">Amount</th></tr></thead><tbody>{included.map(item => <tr key={item.id}><td><b>{item.treatment_name_snapshot}</b>{item.tooth_or_region && <span>Tooth / region: {item.tooth_or_region}</span>}<small>{item.status}</small></td><td>{item.quantity}</td><td>{money(item.unit_price_snapshot)}</td><td>{money(item.discount_amount)}<small>{item.discount_percent}%</small></td><td>{money(item.final_price)}</td></tr>)}</tbody></table></div>
       {!included.length && <p className="plan-empty">No treatments in this estimate yet.</p>}
       <div className="treatment-print-totals"><div><span>Subtotal</span><b>{money(totals.subtotal)}</b></div><div><span>Treatment discounts</span><b>−{money(totals.discount)}</b></div>{adjustment !== 0 && <div><span>Additional {adjustment < 0 ? 'reduction' : 'charge'}</span><b>{adjustment < 0 ? '−' : '+'}{money(Math.abs(adjustment))}</b></div>}<div className="treatment-print-total"><span>Estimated total</span><b>{money(estimate)}</b></div></div>
