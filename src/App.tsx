@@ -11,7 +11,7 @@ import { TreatmentPriceList } from './TreatmentPricing'
 import { InventoryPage } from './InventoryPage'
 import { FinancePage } from './FinancePage'
 
-type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
+type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'treatment_plan' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'reports' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
 type Branch = { id: string; organization_id: string; name: string; timezone: string }
 type BranchMetric = { id: string; name: string; patientCount: number; appointmentCount: number }
@@ -357,9 +357,9 @@ export default function App() {
     if (error) throw new Error(error.message)
     if (!data) throw new Error('The clinical file was not saved. Check your access and try again.')
     setPatients(current => current.map(patient => patient.id === patientId ? data as Patient : patient))
-    setNotice('Clinical file saved.')
+    setNotice('Clinical file saved. Review the treatment plan with your patient.')
     setAppointmentSlot(null)
-    navigateTo('appointments')
+    navigateTo('treatment_plan')
   }
 
   const switchBranch = async (branch: Branch) => {
@@ -416,7 +416,7 @@ export default function App() {
     <main>
       <header className="topbar">
         <button className="icon-btn" aria-label="Toggle navigation" onClick={() => setSidebar(value => !value)}><Menu size={19} /></button>
-        {!['appointments', 'patients'].includes(view) && <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\.\s*/, 'Dr. ')}` : view === 'booking' ? 'Book appointment' : view === 'patient_file' ? 'Clinical file' : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>}
+        {!['appointments', 'patients'].includes(view) && <div className="crumb"><b>{view === 'dashboard' ? `${greeting()}, ${profileName.replace(/^Dr\.\s*/, 'Dr. ')}` : view === 'booking' ? 'Book appointment' : view === 'patient_file' ? 'Clinical file' : view === 'treatment_plan' ? 'Treatment plan' : nav.find(item => item[0] === view)?.[1] || 'Settings'}</b><span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>}
         <div className="top-actions"><BranchSelector active={workspace.clinicId} branches={branches} onSelect={switchBranch} /><div className="search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patients, records..." /></div><button className="avatar large" aria-label="Open settings" onClick={() => setView('settings')}>{initials(profileName)}</button></div>
       </header>
       {notice && <div className="notice">{notice}<button onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button></div>}
@@ -426,6 +426,7 @@ export default function App() {
         {view === 'booking' && appointmentSlot && <BookingPage doctors={activeDoctors} patientGroups={patientGroups} slot={appointmentSlot} schedule={clinicSchedule} appointments={appointments} onCancel={() => { setAppointmentSlot(null); setView('appointments') }} onSave={createBooking} />}
         {view === 'patients' && <PatientsPage patients={filteredPatients} onOpenFile={patientId => { setSelectedPatientId(patientId); setView('patient_file') }} onNew={() => setPatientModalOpen(true)} />}
         {view === 'patient_file' && selectedPatient && <PatientFilePage patient={selectedPatient} workspace={workspace} onNotice={setNotice} onBack={() => setView('patients')} onSave={saveClinicalFile} onOpenImagingPage={() => setView('patient_imaging')} />}
+        {view === 'treatment_plan' && selectedPatient && <TreatmentPlan key={`${workspace.clinicId}-${selectedPatient.id}`} patient={selectedPatient} workspace={workspace} clinicianName={profileName} onNotice={setNotice} onBack={() => setView('patient_file')} onAppointments={() => setView('appointments')} />}
         {view === 'patient_imaging' && selectedPatient && <PatientImagingPage patient={selectedPatient} onBack={() => setView('patient_file')} onOpenImaging={asset => { setSelectedImagingAsset(asset); setView('imaging_viewer') }} onOpenCbctUpload={() => setView('cbct_upload')} />}
         {view === 'imaging_viewer' && selectedPatient && selectedImagingAsset && <ImagingViewerPage patient={selectedPatient} asset={selectedImagingAsset} onBack={() => setView('patient_imaging')} />}
         {view === 'cbct_upload' && selectedPatient && <CBCTUploadPage patient={selectedPatient} onBack={() => setView('patient_imaging')} />}
@@ -434,7 +435,7 @@ export default function App() {
         {view === 'finance' && <FinancePage workspace={workspace} onNotice={setNotice} />}
         {view === 'imports' && <ImportPage workspace={workspace} onNotice={setNotice} onImported={() => { loadRecords(workspace); loadBranches(workspace) }} />}
         {view === 'settings' && <SettingsPage profileName={profileName} email={email} clinicName={workspace.clinicName} branches={branches} entitlement={entitlement} schedule={clinicSchedule} onCreateBranch={createBranch} onScheduleSave={saveClinicSchedule} onSave={async (name, clinicName) => { const [profileResult, clinicResult] = await Promise.all([supabase.from('profiles').upsert({ id: (await supabase.auth.getUser()).data.user?.id, full_name: name }), supabase.from('clinics').update({ name: clinicName, updated_at: new Date().toISOString() }).eq('id', workspace.clinicId)]) ; if (profileResult.error || clinicResult.error) setNotice(profileResult.error?.message || clinicResult.error?.message || 'Could not save settings.'); else { setProfileName(name); setWorkspace(current => current ? { ...current, clinicName } : current); setNotice('Personalization saved.'); } }} onLogout={handleLogout} />}
-        {!['dashboard', 'appointments', 'patients', 'patient_file', 'settings', 'imports', 'inventory', 'finance'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
+        {!['dashboard', 'appointments', 'patients', 'patient_file', 'treatment_plan', 'settings', 'imports', 'inventory', 'finance'].includes(view) && <PlaceholderPage view={view} workspace={workspace} onNotice={setNotice} />}
       </div>
     </main>
     {patientModalOpen && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
@@ -861,7 +862,7 @@ function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patie
           <p>Capture the essential history, examination and plan in the order of a real consultation.</p>
         </div>
         <div className="clinical-progress" aria-label="Clinical file workflow">
-          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><button type="button" onClick={() => jumpTo('treatment-plan')}>Plan</button>
+          <button type="button" className="done" onClick={() => jumpTo('medical-screening')}>Reception</button><button type="button" className="active" onClick={() => jumpTo('clinical-assessment')}>Assessment</button><span>Plan · next</span>
         </div>
       </div>
 
@@ -905,11 +906,10 @@ function ClinicalFile({ patient, workspace, onNotice, onSave }: { patient: Patie
       </section>
 
       </form>
-      <TreatmentPlan patient={patient} workspace={workspace} onNotice={onNotice} />
 
-      {saveError && <div className="notice" role="alert">{saveError}</div>}
+      {saveError && <div className="clinical-save-error" role="alert">{saveError}</div>}
       <div className="clinical-action-bar">
-        <div><strong>Ready to continue?</strong><span>Save this assessment and return to appointments.</span></div>
+        <div><strong>Ready to continue?</strong><span>Save this assessment to continue to the treatment plan.</span></div>
         <div><button type="submit" form="clinical-assessment-form" className="primary" disabled={saving}>{saving ? 'Saving…' : 'Save clinical file'}</button></div>
       </div>
     </div>
