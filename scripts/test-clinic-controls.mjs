@@ -12,4 +12,6 @@ for(const name of ['0001_identity_tenancy_rbac.sql','20260817143000_master_treat
 await db.exec(`alter table patients add column next_follow_up_date date;grant select,insert,update,delete on all tables in schema public to authenticated;grant usage,select on all sequences in schema public to authenticated;`);
 try{await db.exec(readFileSync('supabase/migrations/20260912094928_clinic_admin_controls.sql','utf8'));console.log('Migration applies successfully')}catch(e){console.error('MIGRATION',e.message,e.query?.slice(-1200));process.exit(1)}
 try{await db.exec(readFileSync('supabase/tests/clinic_admin_controls.sql','utf8'));console.log('All permission, tenant, price, finance, imaging and leave assertions passed')}catch(e){console.error('ASSERTION',e.message,e.query?.slice(-1500));process.exit(1)}
+await db.exec(readFileSync('supabase/migrations/20260912105036_branch_monthly_performance.sql','utf8'));
+try { await db.exec(readFileSync('supabase/tests/branch_monthly_performance.sql','utf8')); console.log('Monthly report: full-month totals, branch isolation, categories, dates and permissions passed'); } catch(e) { console.error('REPORT ASSERTION',e.message);process.exit(1) }
 await db.close();

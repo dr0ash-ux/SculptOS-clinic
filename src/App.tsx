@@ -9,7 +9,6 @@ import { AdminPage, Practitioner } from './AdminPage'
 import { SettingsPage } from './SettingsPage'
 import { AccessContext, colourHex, usePermission } from './clinicAccess'
 import { TreatmentPlan } from './TreatmentPlan'
-import { TreatmentPriceList } from './TreatmentPricing'
 import { InventoryPage } from './InventoryPage'
 import { FinancePage } from './FinancePage'
 
@@ -425,7 +424,7 @@ export default function App() {
   const nav: Array<[View, string, typeof LayoutDashboard]> = [
     ['dashboard', 'Overview', LayoutDashboard], ['appointments', 'Appointments', CalendarDays], ['patients', 'Patients', Users],
     ['crm', 'CRM', ClipboardList], ['inventory', 'Inventory', Package], ['prescriptions', 'Pharmacy & Rx', FileText],
-    ['finance', 'Finance', WalletCards], ['imports', 'Import centre', FileText], ['ai', 'AI Studio', Activity], ['reports', 'Reports', FileText],
+    ['finance', 'Clinic Performance', WalletCards], ['imports', 'Import centre', FileText], ['ai', 'AI Studio', Activity], ['reports', 'Reports', FileText],
     ...(workspace.role === 'admin' ? [['admin', 'Admin controls', Settings] as [View, string, typeof LayoutDashboard]] : []),
   ]
 
@@ -1079,8 +1078,7 @@ function BranchSetup({ branches, entitlement, newBranch, setNewBranch, onCreate 
 }
 
 function PlaceholderPage({ view, workspace, onNotice }: { view: View; workspace: { organizationId: string; clinicId: string; role: string }; onNotice: (message: string) => void }) {
-  const labels: Record<string, string> = { inventory: 'Inventory', finance: 'Finance', crm: 'CRM', ai: 'AI Studio', prescriptions: 'Pharmacy & Rx', reports: 'Reports' }
-  if (view === 'finance') return <><section><Hero eyebrow="ADMIN · FINANCE" title="Finance dashboard" copy="Income, expenses, outstanding balances and clinic pricing." /><div className="metric-grid"><Metric label="Total income" value="₹4.82L" hint="Current month" icon={<WalletCards size={18}/>} /><Metric label="Expenditure" value="₹1.43L" hint="Procurement & payroll" icon={<CreditCard size={18}/>} /><Metric label="Net profit" value="₹3.39L" hint="Income − expenditure" icon={<Activity size={18}/>} /><Metric label="Discounts given" value="₹28.4K" hint="Not cash expenditure" icon={<FileText size={18}/>} /></div></section><TreatmentPriceList workspace={workspace} onNotice={onNotice} /></>
+  const labels: Record<string, string> = { inventory: 'Inventory', finance: 'Clinic Performance', crm: 'CRM', ai: 'AI Studio', prescriptions: 'Pharmacy & Rx', reports: 'Reports' }
   if (view === 'inventory') return <section><Hero eyebrow="ADMIN · INVENTORY" title="Inventory & supplies" copy="Stock movement, usage and wastage are tracked separately from procurement spend." /><div className="metric-grid"><Metric label="Items tracked" value="248" hint="14 need reorder" icon={<Package size={18}/>} /><Metric label="Inventory value" value="₹8.6L" hint="At saved unit costs" icon={<WalletCards size={18}/>} /><Metric label="Usage this month" value="₹42.3K" hint="Compared with ₹38.1K" icon={<Activity size={18}/>} /><Metric label="Wastage this month" value="₹3.2K" hint="Reported separately" icon={<FileText size={18}/>} /></div><div className="panel"><div className="panel-head"><div><h3>Low-stock alerts</h3><span>Reorder when stock reaches its clinic threshold.</span></div></div><div className="inventory-table"><div className="inventory-row"><div><b>Implant components</b><span>Implantology · piece</span></div><div>18 in stock</div><div className="warning">Threshold: 20</div><div>Reorder</div></div><div className="inventory-row"><div><b>Gutta-percha</b><span>Endodontics · box</span></div><div>24 in stock</div><div className="warning">Threshold: 30</div><div>Reorder</div></div></div></div></section>
   return <section><Hero eyebrow="SCULPTOS CLINIC" title={labels[view]} copy="This module is next in the workflow roadmap. Your appointments and patient records are already live." /><div className="panel"><EmptyState label="The clinical core has been connected first: secure sign-in, patient records, appointments, calendar navigation and personalization." /></div></section>
 }
