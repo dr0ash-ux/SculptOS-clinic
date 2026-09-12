@@ -164,8 +164,8 @@ export function PharmacyPage({
         </div>
       )}
       <p className="pharmacy-muted">
-        Adult presets · OD once daily · BID twice daily · TID three times daily
-        · QID four times daily · PRN as needed.
+        Prescriber confirms dose · OD once daily · BID twice daily · TID three
+        times daily · QID four times daily · PRN as needed.
       </p>
       <div className="pharmacy-filters">
         <label>
@@ -231,11 +231,11 @@ export function PharmacyPage({
                       {!m.active ? " · Archived" : ""}
                     </small>
                   </td>
-                  <td>{m.default_dose || "Set dose"}</td>
+                  <td>{m.default_dose || "Patient-specific"}</td>
                   <td>{m.route}</td>
                   <td>
                     <span className="medicine-tag">
-                      {m.frequency || "Set frequency"}
+                      {m.frequency || "Clinician-set"}
                     </span>
                   </td>
                   <td>
@@ -394,6 +394,9 @@ export function MedicineForm({
                       "Topical",
                       "Mouth rinse",
                       "Oromucosal",
+                      "Buccal",
+                      "Sublingual",
+                      "Inhalation",
                       medicine?.route,
                     ].filter(Boolean),
                   ),
@@ -440,6 +443,10 @@ export function MedicineForm({
                   "Antibiotic",
                   "Antifungal",
                   "Antiseptic",
+                  "Gastrointestinal",
+                  "Antihistamine",
+                  "Pediatric liquids",
+                  "Emergency",
                   "Other",
                 ].map((c) => (
                   <option key={c}>{c}</option>
@@ -498,6 +505,7 @@ export const frequencyLabels: Record<string, string> = {
   TID: "Three times daily",
   QID: "Four times daily",
   PRN: "As needed",
+  STAT: "Single immediate dose",
 };
 export const medicineOption = (m: Medicine) =>
-  `${m.name} · ${m.default_dose || m.strength} · ${m.route} · ${m.frequency || "Set frequency"}`;
+  `${m.category === "Emergency" ? "[Emergency] " : m.category === "Pediatric liquids" ? "[Pediatric] " : ""}${m.name} · ${m.default_dose || m.strength} · ${m.route} · ${m.frequency || "Clinician-set"}`;

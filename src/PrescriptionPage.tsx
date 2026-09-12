@@ -59,7 +59,6 @@ export function PrescriptionPage({
     [history, setHistory] = useState<Prescription[]>([]),
     [items, setItems] = useState<RxItem[]>([]),
     [selected, setSelected] = useState(""),
-    [query, setQuery] = useState(""),
     [date, setDate] = useState(localDate()),
     [doctor, setDoctor] = useState(clinicianName),
     [saved, setSaved] = useState<Prescription | null>(null),
@@ -274,8 +273,7 @@ export function PrescriptionPage({
         <p>
           Medical history: {patient.medical_history || "Not recorded"}. Confirm
           age/weight, allergies, pregnancy, organ function and interactions.
-          Catalogue doses are adult references; enter the patient’s dose and
-          duration below.
+          Confirm the patient-specific dose, frequency and duration below.
         </p>
       </div>
       {brandingError && (
@@ -371,35 +369,18 @@ export function PrescriptionPage({
                 </div>
                 <div className="rx-add">
                   <label>
-                    Find medicine
-                    <input
-                      aria-label="Find prescription medicine"
-                      placeholder="Search medicines…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Medicine & strength
+                    Medicine · dose · route · frequency
                     <select
                       aria-label="Prescription medicine"
                       value={selected}
                       onChange={(e) => setSelected(e.target.value)}
                     >
                       <option value="">Select from pharmacy</option>
-                      {meds
-                        .filter(
-                          (m) =>
-                            `${m.name} ${m.strength}`
-                              .toLowerCase()
-                              .includes(query.toLowerCase()) ||
-                            m.key === selected,
-                        )
-                        .map((m) => (
-                          <option key={m.key} value={m.key}>
-                            {medicineOption(m)}
-                          </option>
-                        ))}
+                      {meds.map((m) => (
+                        <option key={m.key} value={m.key}>
+                          {medicineOption(m)}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <button
@@ -508,6 +489,9 @@ export function PrescriptionPage({
                                   "Topical",
                                   "Mouth rinse",
                                   "Oromucosal",
+                                  "Buccal",
+                                  "Sublingual",
+                                  "Inhalation",
                                   m.route,
                                 ]),
                               ).map((route) => (
@@ -529,7 +513,7 @@ export function PrescriptionPage({
                         </label>
                       ))}
                       <label className="span-all">
-                        How to take / use
+                        Instructions · how to take / use
                         <textarea
                           required
                           maxLength={1000}
