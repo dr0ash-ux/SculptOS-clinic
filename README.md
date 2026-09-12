@@ -12,3 +12,11 @@ The `finance` route is labelled **Clinic Performance**. Treatment price manageme
 - Charts, exact daily data, and a monthly CSV use the same aggregate payload. No sample records or fallback figures ship with the report.
 
 `npm run test:permissions` also verifies report totals above 80 transactions, branch isolation, finance-only access, timezone boundaries, pending/void exclusion, inventory reconciliation, leap-month empty states and completion-date integrity in disposable PostgreSQL fixtures.
+
+### Pharmacy and prescriptions
+
+Pharmacy reads eight sourced adult dental medicine references from `dental_medicine_references`, plus branch-specific `clinic_medicines`. Reference links and review dates are stored with the data. These are prescribing references, not stock balances, automatic treatment recommendations, or patient seed records. SDCEP/NHS and manufacturer reference doses require clinician review against local product information and each patient's circumstances. Custom medicines can be added, edited and archived with Admin-controlled pharmacy permissions. New pharmacy and prescribing capabilities are admin-only by default; staff require explicit per-member grants.
+
+The treatment plan and pharmacy patient selector open a separate prescription editor. Strength/concentration and administration notes come from the catalogue; dose, frequency and duration require explicit entry. Saving creates an immutable, branch-scoped prescription snapshot with server-stamped author and patient identity. Catalogue edits do not rewrite old prescriptions. Print CSS isolates the saved medication sheet and excludes treatment costs, clinical notes and navigation. Saved versions can be reprinted; changes are saved as new versions.
+
+Financial entries now persist payer/payee, invoice/receipt/UTR reference, subcategory, optional patient link and the expense's related month. Monthly cash reporting still uses the payment date. Doctor calendar cards use the assigned colour at full opacity with luminance-selected black/white text. The redundant Reports navigation and shortcut have been removed.

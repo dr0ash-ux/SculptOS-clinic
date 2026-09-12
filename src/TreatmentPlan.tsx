@@ -26,9 +26,9 @@ const priceItem = (item: Item): Item => {
   return { ...item, discount_amount, final_price: round(subtotal - discount_amount) }
 }
 
-export function TreatmentPlan({ patient, workspace, clinicianName, onNotice, onBack, onAppointments }: {
+export function TreatmentPlan({ patient, workspace, clinicianName, onNotice, onBack, onAppointments, onPrescription }: {
   patient: Patient; workspace: PricingWorkspace & { clinicName: string }; clinicianName: string;
-  onNotice: (message: string) => void; onBack: () => void; onAppointments: () => void;
+  onNotice: (message: string) => void; onBack: () => void; onAppointments: () => void; onPrescription: () => void;
 }) {
   const [catalogue, setCatalogue] = useState<CatalogueItem[]>([])
   const [plan, setPlan] = useState<Plan | null>(null)
@@ -163,7 +163,7 @@ export function TreatmentPlan({ patient, workspace, clinicianName, onNotice, onB
   const name = [patient.patient_title, patient.first_name, patient.last_name].filter(Boolean).join(' ')
 
   return <section className="treatment-plan-page">
-    <div className="treatment-page-toolbar"><div><span className="eyebrow">PATIENT CARE · TREATMENT PLAN</span><h1>{name}</h1><p>{patient.patient_number} · Review treatment options and costs with your patient.</p></div><div className="treatment-page-navigation"><button className="ghost" disabled={saving} onClick={() => leave(onBack)}><ChevronLeft size={16}/>Clinical file</button><button className="ghost" disabled={saving} onClick={() => leave(onAppointments)}>Appointments</button></div></div>
+    <div className="treatment-page-toolbar"><div><span className="eyebrow">PATIENT CARE · TREATMENT PLAN</span><h1>{name}</h1><p>{patient.patient_number} · Review treatment options and costs with your patient.</p></div><div className="treatment-page-navigation"><button className="ghost" disabled={saving} onClick={() => leave(onBack)}><ChevronLeft size={16}/>Clinical file</button><button className="ghost" disabled={saving} onClick={() => leave(onAppointments)}>Appointments</button><button className="primary" disabled={saving} onClick={() => leave(onPrescription)}>Prescription</button></div></div>
     <form className="clinical-section treatment-plan plan-editor" onSubmit={submit}>
       <div className="clinical-section-head"><div><div><h3>Treatments & pricing</h3><p>Add treatments, review the estimate, then save or print the patient copy.</p></div></div><span role="status">{saving ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'All changes saved' : ''}</span></div>
       {error && <p className="clinical-save-error" role="alert">{error}</p>}

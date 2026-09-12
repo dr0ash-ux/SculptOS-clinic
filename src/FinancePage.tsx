@@ -21,6 +21,10 @@ type Transaction = {
   amount: number;
   payment_method: string | null;
   status: string;
+  subcategory?: string;
+  counterparty?: string;
+  reference_number?: string;
+  expense_period?: string;
   note: string | null;
 };
 type Daily = {
@@ -97,11 +101,19 @@ const failMessage = (e: unknown) =>
 export function FinancePage({
   workspace,
   onNotice,
+  patients = [],
 }: {
   workspace: Workspace;
+  patients?: {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    patient_number: string;
+  }[];
   onNotice: (message: string) => void;
 }) {
   const canManage = usePermission("finance.manage");
+  const canSeePatients = usePermission("patients.view");
   const [month, setMonth] = useState(today().slice(0, 7)),
     [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{ key: string; report: Report } | null>(
@@ -166,7 +178,7 @@ export function FinancePage({
         const { data, count, error } = await supabase
           .from("financial_transactions")
           .select(
-            "id,transaction_date,type,category,amount,payment_method,status,note",
+            "id,transaction_date,type,category,amount,payment_method,status,note,subcategory,counterparty,reference_number,expense_period",
             { count: "exact" },
           )
           .eq("clinic_id", workspace.clinicId)
@@ -208,22 +220,31 @@ export function FinancePage({
         amount = Number(form.get("amount"));
       if (!Number.isFinite(amount) || amount <= 0)
         throw new Error("Enter a valid amount greater than zero.");
-      const { error } = await supabase
-        .from("financial_transactions")
-        .insert({
-          clinic_id: workspace.clinicId,
-          transaction_date: String(form.get("date")),
-          type,
-          category: labels[category],
-          reporting_category: category,
-          subcategory: String(form.get("subcategory") || "").trim() || null,
-          amount,
-          payment_method: String(form.get("payment_method")) || null,
-          note: String(form.get("note")).trim() || null,
-          status: "recorded",
-          created_by: auth.user.id,
-          updated_by: auth.user.id,
-        });
+      const { error } = await supabase.from("financial_transactions").insert({
+        clinic_id: workspace.clinicId,
+        transaction_date: String(form.get("date")),
+        type,
+        category: labels[category],
+        reporting_category: category,
+        subcategory: String(form.get("subcategory") || "").trim() || null,
+        amount,
+        payment_method: String(form.get("payment_method")) || null,
+        note: String(form.get("note")).trim() || null,
+        status: "recorded",
+        counterparty: String(form.get("counterparty") || "").trim() || null,
+        reference_number:
+          String(form.get("reference_number") || "").trim() || null,
+        patient_id:
+          type === "income"
+            ? String(form.get("patient_id") || "") || null
+            : null,
+        expense_period:
+          type === "expense" && form.get("expense_period")
+            ? String(form.get("expense_period")) + "-01"
+            : null,
+        created_by: auth.user.id,
+        updated_by: auth.user.id,
+      });
       if (error) throw new Error(error.message);
       if (currentKey.current === saveKey) {
         setAdding(false);
@@ -600,6 +621,16 @@ export function FinancePage({
                               )}{" "}
                               {r.category}
                             </span>
+                            {r.subcategory && <small>{r.subcategory}</small>}
+                            {r.counterparty && <small>{r.counterparty}</small>}
+                            {r.reference_number && (
+                              <small>Ref: {r.reference_number}</small>
+                            )}
+                            {r.expense_period && (
+                              <small>
+                                Period: {r.expense_period.slice(0, 7)}
+                              </small>
+                            )}
                             {r.note && <small>{r.note}</small>}
                           </td>
                           <td>
@@ -655,6 +686,7 @@ export function FinancePage({
           saving={saving}
           error={saveError}
           clinicName={workspace.clinicName}
+          patients={canSeePatients ? patients : []}
           onClose={() => !saving && setAdding(false)}
           onSubmit={add}
         />
@@ -924,12 +956,19 @@ function EntryForm({
   saving,
   error,
   clinicName,
+  patients,
   onClose,
   onSubmit,
 }: {
   saving: boolean;
   error: string;
   clinicName: string;
+  patients: {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    patient_number: string;
+  }[];
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -1031,21 +1070,82 @@ function EntryForm({
                 required
               />
             </label>
-            {category === "inventory" && (
+            {(type === "expense" || type === "income") && (
               <label className="span-all">
-                Inventory category
+                {category === "inventory"
+                  ? "Inventory category"
+                  : category === "marketing"
+                    ? "Campaign / channel"
+                    : category === "payroll"
+                      ? "Salary / consultant / incentive"
+                      : "Subcategory / purpose"}
                 <input
                   name="subcategory"
                   maxLength={120}
-                  placeholder="e.g. Endodontics or consumables"
+                  placeholder={
+                    category === "inventory"
+                      ? "e.g. Endodontics or consumables"
+                      : category === "marketing"
+                        ? "e.g. Google Ads, print, referral campaign"
+                        : "e.g. Advance payment, lab bill, software"
+                  }
                 />
-                <small>Leave blank if unknown; shown as unallocated.</small>
+                <small>Add detail for reconciliation and monthly review.</small>
+              </label>
+            )}
+            <label>
+              {type === "income"
+                ? "Received from (optional)"
+                : "Supplier / payee"}
+              <input
+                name="counterparty"
+                maxLength={160}
+                placeholder={
+                  type === "income"
+                    ? "Payer or insurer"
+                    : "Vendor, employee or consultant"
+                }
+                required={type === "expense"}
+              />
+            </label>
+            <label>
+              Invoice / receipt / UTR reference
+              <input
+                name="reference_number"
+                maxLength={120}
+                placeholder="e.g. INV-104 or payment reference"
+              />
+            </label>
+            {type === "income" && patients.length > 0 && (
+              <label className="span-all">
+                Link patient (optional)
+                <select name="patient_id" defaultValue="">
+                  <option value="">No patient link</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {[p.first_name, p.last_name].filter(Boolean).join(" ")} ·{" "}
+                      {p.patient_number}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {type === "expense" && (
+              <label className="span-all">
+                Expense relates to month (optional)
+                <input name="expense_period" type="month" />
+                <small>
+                  For payroll, rent or campaign reconciliation. Cash totals use
+                  the payment date above.
+                </small>
               </label>
             )}
             <label>
               Payment method
-              <select name="payment_method" defaultValue="">
-                <option value="">Not specified</option>
+              <select name="payment_method" defaultValue="" required>
+                <option value="" disabled>
+                  Select payment method
+                </option>
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="upi">UPI</option>
@@ -1054,7 +1154,7 @@ function EntryForm({
               </select>
             </label>
             <label>
-              Reference / note
+              Notes / payment context
               <input
                 name="note"
                 maxLength={500}

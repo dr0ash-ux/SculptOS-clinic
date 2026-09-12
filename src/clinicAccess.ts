@@ -2,6 +2,27 @@ import { createContext, useContext } from "react";
 
 export const permissionGroups = [
   {
+    title: "Pharmacy & prescriptions",
+    copy: "Manage medicines and control prescription access.",
+    items: [
+      [
+        "pharmacy.view",
+        "View medicine catalogue",
+        "Read reference and clinic medicines.",
+      ],
+      [
+        "pharmacy.manage",
+        "Manage clinic medicines",
+        "Add, edit and archive custom medicines.",
+      ],
+      [
+        "prescriptions.write",
+        "Write prescriptions",
+        "Create patient prescriptions and print saved copies.",
+      ],
+    ],
+  },
+  {
     title: "Patient records",
     copy: "Protect patient identity and clinical history.",
     items: [
@@ -158,6 +179,8 @@ export type Workspace = {
 };
 
 export const permissionDependencies: Record<string, string[]> = {
+  "pharmacy.manage": ["pharmacy.view"],
+  "prescriptions.write": ["patients.view", "pharmacy.view"],
   "patients.create": ["patients.view"],
   "patients.update": ["patients.view"],
   "patients.dates.edit": ["patients.view"],
@@ -177,3 +200,20 @@ export const permissionDependencies: Record<string, string[]> = {
   "finance.manage": ["finance.view"],
   "inventory.manage": ["inventory.view"],
 };
+
+// Use the actual assigned colour with WCAG-selected foreground, including very light colours.
+export function doctorCardStyle(colour: string) {
+  const background = colourHex(colour);
+  const values = [1, 3, 5]
+    .map((i) => parseInt(background.slice(i, i + 2), 16) / 255)
+    .map((v) =>
+      v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4),
+    );
+  const luminance =
+    values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+  return {
+    background,
+    color: luminance > 0.179 ? "#000000" : "#ffffff",
+    borderLeftColor: luminance > 0.7 ? "#52635c" : background,
+  };
+}
