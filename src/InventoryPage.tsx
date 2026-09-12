@@ -1,3 +1,4 @@
+import { usePermission } from './clinicAccess'
 import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownToLine, Check, History, Package, Plus, Search, Truck, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
@@ -14,7 +15,7 @@ const startMonth=()=>{const d=new Date();return new Date(d.getFullYear(),d.getMo
 export function InventoryPage({workspace,onNotice}:{workspace:Workspace;onNotice:(message:string)=>void}){
  const [items,setItems]=useState<Item[]>([]),[moves,setMoves]=useState<Movement[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[query,setQuery]=useState(''),[category,setCategory]=useState('all'),[stock,setStock]=useState('all')
  const [form,setForm]=useState<Form>(blank),[adding,setAdding]=useState(false),[picker,setPicker]=useState<'usage'|'receipt'|null>(null),[selected,setSelected]=useState<Item|null>(null),[saving,setSaving]=useState<string|null>(null)
- const canManage=['admin','manager','receptionist'].includes(workspace.role)
+ const canManage=usePermission('inventory.manage')
  const load=async()=>{setLoading(true);setError('');const [a,b]=await Promise.all([supabase.from('inventory_items').select('id,clinic_id,name,category,sku,unit,reorder_threshold,current_stock,active,default_unit_cost,supplier,batch_number,expiry_date,storage_notes,description').eq('clinic_id',workspace.clinicId).order('name'),supabase.from('inventory_stock_movements').select('id,movement_type,total_value').gte('movement_date',startMonth())]);const message=a.error?.message||b.error?.message;if(message){setError(message);onNotice(message)}setItems((a.data||[])as Item[]);setMoves((b.data||[])as Movement[]);setLoading(false)}
  useEffect(()=>{void load()},[workspace.clinicId])
  const shown=useMemo(()=>items.filter(i=>{const low=i.current_stock<=i.reorder_threshold;return `${i.name} ${i.category} ${i.sku||''} ${i.supplier||''}`.toLowerCase().includes(query.toLowerCase())&&(category==='all'||i.category===category)&&(stock==='all'||(stock==='low'?low:!low))}),[items,query,category,stock])

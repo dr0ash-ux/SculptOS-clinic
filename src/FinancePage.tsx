@@ -1,3 +1,4 @@
+import { usePermission } from './clinicAccess'
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { ArrowDownCircle, ArrowUpCircle, CreditCard, Plus, WalletCards, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
@@ -10,7 +11,7 @@ const firstOfMonth=()=>{const d=new Date();return new Date(d.getFullYear(),d.get
 
 export function FinancePage({workspace,onNotice}:{workspace:Workspace;onNotice:(message:string)=>void}){
  const [rows,setRows]=useState<Transaction[]>([]),[loading,setLoading]=useState(true),[adding,setAdding]=useState(false),[saving,setSaving]=useState(false)
- const canManage=['admin','manager'].includes(workspace.role)
+ const canManage=usePermission('finance.manage')
  const load=async()=>{setLoading(true);const {data,error}=await supabase.from('financial_transactions').select('id,transaction_date,type,category,amount,payment_method,status,note').eq('clinic_id',workspace.clinicId).neq('status','void').order('transaction_date',{ascending:false}).limit(80);if(error)onNotice(error.message);setRows((data||[]) as Transaction[]);setLoading(false)}
  useEffect(()=>{void load()},[workspace.clinicId])
  const month=useMemo(()=>rows.filter(row=>row.transaction_date>=firstOfMonth()),[rows])
