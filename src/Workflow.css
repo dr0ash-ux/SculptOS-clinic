@@ -1,0 +1,25 @@
+.clinic-loading { display:grid; justify-items:center; gap:12px; padding:38px 20px; text-align:center; min-height:260px; color:#354365; }
+.clinic-loading img { object-fit:cover; border-radius:28px; box-shadow:0 12px 35px #334d8020; }
+.clinic-loading strong { font-size:17px; }
+.clinic-loading > span { font-size:14px; color:#65718a; }
+.loading-dots { color:#6579b7; letter-spacing:8px; animation:clinic-breathe 1.6s ease-in-out infinite alternate; }
+@keyframes clinic-breathe { to { opacity:.35; transform:translateY(-3px); } }
+.calendar .slot-button:hover, .calendar .slot-button:focus-visible { background:linear-gradient(125deg,#dce9ff,#e8dfff) !important; color:#344b83 !important; box-shadow:inset 0 0 0 1px #a8b8dc; border-radius:10px; }
+.calendar .slot-button { transition:background .18s, box-shadow .18s; }
+.calendar .appointment { border-radius:9px; transition:filter .18s,box-shadow .18s; }
+.calendar .appointment:hover,.calendar .appointment:focus-visible { filter:brightness(1.04); box-shadow:0 5px 15px #24355030; z-index:6; }
+.appointment-preview { position:fixed; z-index:1000; width:280px; max-width:calc(100vw - 24px); padding:18px; border:1px solid #d5deef; border-radius:16px; background:#fff; color:#263853; box-shadow:0 15px 45px #20335435; pointer-events:none; font-size:14px; }
+.appointment-preview strong { display:block; margin-bottom:12px; font-size:16px; }
+.appointment-preview dl { display:grid; grid-template-columns:85px minmax(0,1fr); gap:8px; margin:0; }
+.appointment-preview dt { color:#667389; }
+.appointment-preview dd { margin:0; overflow-wrap:anywhere; }
+.settings-section { margin:0 0 28px; }
+.settings-section > summary { cursor:pointer; font-size:20px; font-weight:650; padding:18px 8px; color:#34476a; }
+.calendar-preferences { padding:20px; margin-bottom:24px; border:1px solid #dbe2ee; border-radius:16px; background:#fff; }
+.calendar-preferences label { display:flex; align-items:center; gap:10px; margin-top:14px; font-size:14px; }
+.calendar-preferences select { padding:8px 12px; border-radius:8px; border:1px solid #c9d3e5; }
+.calendar-panel[data-hover='rose'] .slot-button:hover,.calendar-panel[data-hover='rose'] .slot-button:focus-visible { background:linear-gradient(125deg,#f8dfe8,#eee3ff) !important; color:#79446a !important; }
+.calendar-panel[data-hover='ocean'] .slot-button:hover,.calendar-panel[data-hover='ocean'] .slot-button:focus-visible { background:linear-gradient(125deg,#d7eaff,#d5edf0) !important; color:#275c77 !important; }
+.notice[role='status'] { position:sticky; top:0; z-index:30; }
+@media (prefers-reduced-motion:reduce) { .loading-dots { animation:none; } .calendar .slot-button,.calendar .appointment { transition:none; } }
+@media print { .clinic-loading,.appointment-preview,.calendar-preferences { display:none; } }
