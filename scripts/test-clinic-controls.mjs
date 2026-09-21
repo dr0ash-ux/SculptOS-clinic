@@ -27,4 +27,7 @@ console.log('Clinic names, member editing, removal, re-addition, admin protectio
 await db.exec(readFileSync('supabase/migrations/20260921125419_prescription_quick_choices.sql','utf8'));
 await db.exec(readFileSync('supabase/tests/prescription_quick_choices.sql','utf8'));
 console.log('Quick choices persist, dated prescriptions retained, cross-clinic reads and writes blocked');
+await db.exec(readFileSync('supabase/migrations/20260921133122_assistant_reminders.sql','utf8'));
+try { await db.exec(readFileSync('supabase/tests/assistant_reminders.sql','utf8')); } catch(e) {console.error('MILO ASSERTION',e.message,e.detail);process.exit(1)}
+console.log('Milo reminders: owner access, colleague and branch isolation, membership revocation, spoofing and completion passed');
 await db.close();

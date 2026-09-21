@@ -16,6 +16,7 @@ import { PrescriptionPage } from './PrescriptionPage'
 import { createPortal } from 'react-dom'
 import { dateKey } from './calendarDate'
 import { ClinicLoading } from './ClinicLoading'
+import { MiloAssistant } from './MiloAssistant'
 
 type View = 'dashboard' | 'appointments' | 'booking' | 'patients' | 'patient_file' | 'treatment_plan' | 'patient_imaging' | 'imaging_viewer' | 'cbct_upload' | 'inventory' | 'finance' | 'crm' | 'ai' | 'prescriptions' | 'prescription' | 'settings' | 'imports' | 'admin'
 type Workspace = { organizationId: string; clinicId: string; clinicName: string; role: string }
@@ -97,6 +98,8 @@ export default function App() {
   const [view, setView] = useState<View>('appointments')
   const [sidebar, setSidebar] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const currentClinicRef = useRef<string | null>(null)
+  currentClinicRef.current = workspace?.clinicId || null
   const [branches, setBranches] = useState<Branch[]>([])
   const [branchMetrics, setBranchMetrics] = useState<BranchMetric[]>([])
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null)
@@ -307,6 +310,11 @@ export default function App() {
   }
   const createAppointment = async (entry: Omit<Appointment, 'id'>) => {
     if (!workspace) return
+    const date = new Date(entry.scheduled_at), startMinute = date.getHours() * 60 + date.getMinutes()
+    if (!access.has('appointments.manage') || !activeDoctors.some(doctor => doctor.name === entry.clinician_name)) return 'Choose an active doctor and check your appointment permission.'
+    if (clinicSchedule.closedDays.includes(date.getDay()) || startMinute < minutesFromTime(clinicSchedule.open) || startMinute + entry.duration_minutes > minutesFromTime(clinicSchedule.close)) return 'Choose a time and duration within clinic opening hours.'
+    if (appointments.some(item => item.status !== 'cancelled' && item.clinician_name === entry.clinician_name && appointmentsOverlap(entry.scheduled_at, entry.duration_minutes, item.scheduled_at, item.duration_minutes))) return 'This doctor already has an appointment in that time period.'
+    if (clinicSchedule.leaves.some(item => item.doctor === entry.clinician_name && dateKey(date) >= item.startDate && dateKey(date) <= item.endDate && startMinute < minutesFromTime(item.endTime) && startMinute + entry.duration_minutes > minutesFromTime(item.startTime))) return 'This doctor is on leave for the selected appointment time.'
     const { data, error } = await supabase.from('appointments').insert({
       ...entry,
       organization_id: workspace.organizationId,
@@ -314,8 +322,7 @@ export default function App() {
       created_by: (await supabase.auth.getUser()).data.user?.id,
     }).select().single()
     if (error) {
-      setNotice(error.code === '23P01' ? 'This doctor is already booked for part of that time.' : error.message)
-      return
+      return error.code === '23P01' ? 'This doctor is already booked for part of that time.' : error.message
     }
     setAppointments(current => [...current, data as Appointment].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)))
     setAppointmentSlot(null)
@@ -478,6 +485,7 @@ export default function App() {
         </>}
       </div>
     </main>
+    <MiloAssistant key={`${workspace.clinicId}-${email}`} clinicId={workspace.clinicId} clinicName={workspace.clinicName} access={access} currentPage={view} onNavigate={navigateTo} onPatient={id=>{void supabase.from('patients').select('*').eq('clinic_id',workspace.clinicId).eq('id',id).single().then(({data,error})=>{if(currentClinicRef.current!==workspace.clinicId)return;if(error||!data){setNotice('Could not open that patient. Check your connection and access.');return}setPatients(current=>[...current.filter(p=>p.id!==id),data as Patient]);openPatient(id)})}} onBook={(date,patientId)=>{if(!activeDoctors.length){setNotice('Add an active doctor in Admin settings before booking.');return}setSelectedPatientId(patientId);setView('appointments');setAppointmentSlot({date,label:formatTime(date.toISOString())})}} />
     {patientModalOpen && access.has('patients.create') && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
     {appointmentSlot && access.has('appointments.manage') && activeDoctors.length>0 && view !== 'booking' && <AppointmentModal doctors={activeDoctors} slot={appointmentSlot} patients={patients} selectedPatientId={selectedPatientId} onClose={() => setAppointmentSlot(null)} onSave={createAppointment} />}
   </div></AccessContext.Provider>
@@ -1063,7 +1071,7 @@ function BookingPage({ doctors, patientGroups, slot, schedule, appointments, onC
   </form></section>
 }
 
-function AppointmentModal({ doctors, slot, patients, selectedPatientId, onClose, onSave }: { doctors: ScheduleDoctor[]; slot: Slot; patients: Patient[]; selectedPatientId: string | null; onClose: () => void; onSave: (entry: Omit<Appointment, 'id'>) => Promise<void> }) {
+function AppointmentModal({ doctors, slot, patients, selectedPatientId, onClose, onSave }: { doctors: ScheduleDoctor[]; slot: Slot; patients: Patient[]; selectedPatientId: string | null; onClose: () => void; onSave: (entry: Omit<Appointment, 'id'>) => Promise<string | void> }) {
   const [patientId, setPatientId] = useState(selectedPatientId || patients[0]?.id || '')
   const [patientSearch, setPatientSearch] = useState('')
   const [doctor, setDoctor] = useState(doctors[0])
@@ -1071,17 +1079,22 @@ function AppointmentModal({ doctors, slot, patients, selectedPatientId, onClose,
   const [treatment, setTreatment] = useState('Check-up')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [bookingError, setBookingError] = useState('')
   const selectedPatient = patients.find(patient => patient.id === patientId)
   const matchingPatients = patients.filter(patient => `${patientName(patient)} ${patient.patient_number} ${patient.phone || ''}`.toLowerCase().includes(patientSearch.toLowerCase()))
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!patientId) return
-    setSaving(true)
-    await onSave({ patient_id: patientId, patient_group_id: selectedPatient?.patient_group_id || null, clinician_name: doctor.name, clinician_color: doctor.color, scheduled_at: slot.date.toISOString(), duration_minutes: Number(duration), treatment_label: treatment || 'Check-up', status: 'confirmed', notes })
-    setSaving(false)
+    setSaving(true); setBookingError('')
+    try {
+      const message = await onSave({ patient_id: patientId, patient_group_id: selectedPatient?.patient_group_id || null, clinician_name: doctor.name, clinician_color: doctor.color, scheduled_at: slot.date.toISOString(), duration_minutes: Number(duration), treatment_label: treatment || 'Check-up', status: 'confirmed', notes })
+      if (message) setBookingError(message)
+    } catch { setBookingError('Could not confirm this appointment. Check your connection and the grid before retrying.') }
+    finally { setSaving(false) }
   }
   return <div className="modal-backdrop" role="presentation"><form className="modal appointment-modal" onSubmit={submit}>
     <div className="modal-head"><div><span className="eyebrow">BOOK APPOINTMENT</span><h2>Appointment details</h2><p className="booking-time"><CalendarDays size={14} /> {slot.date.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {slot.label || formatTime(slot.date.toISOString())}</p></div><button type="button" className="icon-btn" onClick={onClose}><X size={18} /></button></div>
+    {bookingError && <p role="alert" className="notice">{bookingError}</p>}
     {patients.length ? <><div className="booking-patient-picker"><label>Find patient by name, ID or phone number<input value={patientSearch} onChange={event => setPatientSearch(event.target.value)} placeholder="Search patient…" /></label><div className="patient-options">{matchingPatients.slice(0, 5).map(patient => <button type="button" className={patient.id === patientId ? 'patient-option selected' : 'patient-option'} key={patient.id} onClick={() => { setPatientId(patient.id); setPatientSearch('') }}><b>{patientName(patient)}</b><span>{patient.patient_number} · {patient.phone || 'No phone number'}</span></button>)}</div></div>
     {selectedPatient && <div className="appointment-patient-summary"><div><span>Patient name</span><b>{patientName(selectedPatient)}</b></div><div><span>Patient ID</span><b>{selectedPatient.patient_number}</b></div><div><span>Patient group</span><b>{patientGroupName(selectedPatient)}</b></div><div><span>Age / sex</span><b>{selectedPatient.date_of_birth ? `${new Date().getFullYear() - new Date(selectedPatient.date_of_birth).getFullYear()} years` : 'Not recorded'} · {selectedPatient.sex || 'Not recorded'}</b></div><div><span>Phone number</span><b>{selectedPatient.phone || 'Not recorded'}</b></div><div><span>Address</span><b>{selectedPatient.location || 'Not recorded'}</b></div><div><span>Occupation</span><b>{selectedPatient.occupation || 'Not recorded'}</b></div><div className="wide"><span>Chief complaint</span><b>{selectedPatient.chief_complaint || 'Not recorded'}</b></div></div>}
     <div className="form-grid two"><label>Assigned doctor<select value={doctor.name} onChange={event => setDoctor(doctors.find(item => item.name === event.target.value) || doctors[0])}>{doctors.map(item => <option key={item.name}>{item.name}</option>)}</select></label><label>Duration<select value={duration} onChange={event => setDuration(event.target.value)}><option value="30">30 minutes</option><option value="60">1 hour</option><option value="90">1.5 hours</option><option value="120">2 hours</option></select></label></div>
