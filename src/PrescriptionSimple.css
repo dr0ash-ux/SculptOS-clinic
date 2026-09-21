@@ -1,0 +1,10 @@
+.rx-editor .rx-item { padding:16px 18px; margin:12px 0; border:1px solid var(--line); border-radius:12px; }
+.rx-editor .rx-item h2 { font-size:16px; margin:0; }
+.rx-compact-instructions { font-size:14px; line-height:1.6; margin:6px 0 10px; }
+.rx-instruction-edit > summary,.rx-saved-preview > summary { cursor:pointer; font-size:14px; color:var(--accent2); padding:8px 0; }
+.rx-instruction-edit[open] { padding-bottom:8px; }
+.rx-instruction-edit .rx-fields { margin-top:12px; }
+.rx-editor .rx-actions { position:sticky; bottom:12px; background:var(--surface); z-index:5; border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:0 6px 24px #24355018; }
+.rx-editor .rx-add { grid-template-columns:minmax(0,1fr) auto; }
+@media(max-width:640px) { .rx-editor .rx-add { display:flex; flex-wrap:wrap; } .rx-editor .rx-add label { width:100%; } .rx-editor .rx-actions { flex-wrap:wrap; bottom:0; } }
+@media print { .rx-actions { display:none !important; } }

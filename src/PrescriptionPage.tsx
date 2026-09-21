@@ -1,13 +1,12 @@
 import { ClinicLoading } from "./ClinicLoading";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react";
+import { Home, Printer, Trash2 } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import { usePermission, Workspace } from "./clinicAccess";
 import {
   fullName,
   frequencyLabels,
-  medicineOption,
   loadMedicines,
   Medicine,
   MedicineForm,
@@ -15,24 +14,14 @@ import {
   RxPatient,
 } from "./PharmacyPage";
 import "./Pharmacy.css";
+import "./PrescriptionSimple.css";
 import { patientAge, mealTiming, dosageForm } from "./prescriptionPrint";
 import {
   ClinicLetterhead,
   loadClinicLetterhead,
   loadClinicLogo,
 } from "./clinicLetterhead";
-type RxItem = {
-  medicine_key: string;
-  name: string;
-  strength: string;
-  form: string;
-  route: string;
-  dose: string;
-  frequency: string;
-  duration: string;
-  instructions: string;
-  print_timing?: string;
-};
+import { prescriptionChoice, choiceSummary, completeChoice, type RxItem } from "./prescriptionChoices";
 type Prescription = {
   id: string;
   prescribed_on: string;
@@ -52,14 +41,15 @@ export function PrescriptionPage({
   patient,
   clinicianName,
   onBack,
-  onComplete,
 }: {
   workspace: Workspace;
   patient: RxPatient;
   clinicianName: string;
   onBack: () => void;
-  onComplete: (message: string) => void;
 }) {
+  const [message, setMessage] = useState("");
+  const [choices, setChoices] = useState<Record<string, RxItem>>({});
+  const [choiceBusy, setChoiceBusy] = useState(false);
   const [meds, setMeds] = useState<Medicine[]>([]),
     [history, setHistory] = useState<Prescription[]>([]),
     [items, setItems] = useState<RxItem[]>([]),
@@ -107,11 +97,11 @@ export function PrescriptionPage({
     const finished = () => {
       if (!printing.current) return;
       printing.current = false;
-      onComplete("Prescription saved. Print dialog closed; you’re back at appointments.");
+      setMessage("Print dialog closed. Your prescription remains saved.");
     };
     window.addEventListener("afterprint", finished);
     return () => window.removeEventListener("afterprint", finished);
-  }, [onComplete]);
+  }, []);
   function printPrescription() {
     if (!printReady) return;
     printing.current = true;
@@ -128,18 +118,28 @@ export function PrescriptionPage({
     setError("");
     Promise.all([
       pharmacyView ? loadMedicines(workspace.clinicId) : Promise.resolve([]),
-      supabase
-        .from("patient_prescriptions")
-        .select("*")
-        .eq("clinic_id", workspace.clinicId)
-        .eq("patient_id", patient.id)
-        .order("created_at", { ascending: false })
-        .limit(50),
+      (async () => {
+        const rows: Prescription[] = [];
+        for (let start = 0; ; start += 100) {
+          const result = await supabase.from("patient_prescriptions").select("*")
+            .eq("clinic_id", workspace.clinicId).eq("patient_id", patient.id)
+            .order("prescribed_on", { ascending: false }).order("created_at", { ascending: false }).order("id")
+            .range(start, start + 99);
+          if (result.error) throw result.error;
+          rows.push(...(result.data || []));
+          if ((result.data || []).length < 100) break;
+        }
+        return { data: rows, error: null };
+      })(),
+      write ? supabase.from("clinic_prescription_choices").select("medicine_key,item").eq("clinic_id", workspace.clinicId) : Promise.resolve({ data: [], error: null }),
     ])
-      .then(([m, r]) => {
+      .then(([m, r, c]) => {
         if (r.error) throw r.error;
+        if (c.error) throw c.error;
         if (alive) {
-          setMeds(m.filter((m) => m.active));
+          const rank = (m: Medicine) => m.code === "clinic-amoxiclav-625" ? 0 : m.code === "clinic-zerodol-sp" ? 1 : 2;
+          setMeds(m.filter(m => m.active).sort((a,b) => rank(a)-rank(b) || a.name.localeCompare(b.name)));
+          setChoices(Object.fromEntries((c.data || []).map(row => [row.medicine_key, row.item as RxItem])));
           setHistory(r.data || []);
         }
       })
@@ -152,7 +152,7 @@ export function PrescriptionPage({
     return () => {
       alive = false;
     };
-  }, [workspace.clinicId, patient.id, reload, pharmacyView]);
+  }, [workspace.clinicId, patient.id, reload, pharmacyView, write]);
   useEffect(() => {
     document.body.classList.add("prescription-active");
     return () =>
@@ -182,26 +182,22 @@ export function PrescriptionPage({
     );
     setDirty(true);
   }
-  function addMedicine() {
-    const m = meds.find((m) => m.key === selected);
-    if (!m) return;
-    setItems((a) => [
-      ...a,
-      {
-        medicine_key: m.key,
-        name: m.name,
-        strength: m.strength,
-        form: m.form,
-        route: m.route,
-        dose: "",
-        frequency: "",
-        duration: "",
-        instructions: m.instructions,
-        print_timing: mealTiming(m.instructions),
-      },
-    ]);
-    setSelected("");
-    setDirty(true);
+  function addMedicine(key: string) {
+    const m = meds.find(m => m.key === key);
+    if (!m || items.length >= 30) return;
+    setItems(a => [...a, prescriptionChoice(m, choices[m.key])]);
+    setSelected(""); setDirty(true); setMessage("");
+  }
+  async function rememberChoice(item: RxItem) {
+    if (choiceBusy) return;
+    if (!completeChoice(item)) { setError("Complete the instructions once before saving this quick choice."); return; }
+    setChoiceBusy(true); setError("");
+    try {
+      const r = await supabase.from("clinic_prescription_choices").upsert({ clinic_id: workspace.clinicId, medicine_key: item.medicine_key, item });
+      if (r.error) throw r.error;
+      setChoices(current => ({...current, [item.medicine_key]: {...item}}));
+      setMessage("Quick choice saved for future prescriptions.");
+    } catch(e) { setError(pharmacyError(e)); } finally { setChoiceBusy(false); }
   }
   async function save(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -209,11 +205,9 @@ export function PrescriptionPage({
     busy.current = true;
     setSaving(true);
     setError("");
-    const print =
-      (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") ===
-      "print";
     try {
       if (!items.length) throw new Error("Add at least one medicine.");
+      if (items.some(item => !completeChoice(item))) throw new Error("Open Edit instructions and complete the medicine before saving.");
       const auth = await supabase.auth.getUser();
       if (!auth.data.user) throw new Error("Please sign in again.");
       const r = await supabase
@@ -232,15 +226,10 @@ export function PrescriptionPage({
       flushSync(() => {
         setSaved(r.data);
         setDirty(false);
-        setHistory((h) => [r.data, ...h]);
+        setHistory((h) => [r.data, ...h].sort((a,b) => b.prescribed_on.localeCompare(a.prescribed_on) || b.created_at.localeCompare(a.created_at)));
         setSaving(false);
       });
-      if (print && printReady) {
-        document.body.classList.add("prescription-print-ready");
-        printPrescription();
-      } else {
-        onComplete("Prescription saved. You’re back at appointments.");
-      }
+      setMessage("Prescription saved. You can print it or continue here.");
     } catch (e) {
       setError(pharmacyError(e));
     } finally {
@@ -259,9 +248,9 @@ export function PrescriptionPage({
       setDoctor(r.prescriber_name);
       setDirty(false);
       setError("");
+      setMessage(`Viewing saved prescription dated ${r.prescribed_on}.`);
     }
   }
-  const picked = meds.find((m) => m.key === selected);
   return (
     <section className="pharmacy clinic-controls">
       <header className="pharmacy-heading">
@@ -283,12 +272,12 @@ export function PrescriptionPage({
               onBack();
           }}
         >
-          <ArrowLeft size={16} />
-          Back to appointments
+          <Home size={16} />
+          Home · Appointments
         </button>
       </header>
-      <div className="pharmacy-reference-note">
-        <b>Clinical review</b>
+      <details className="pharmacy-reference-note">
+        <summary>Clinical review · Allergies: {patient.allergies || "Not recorded"}</summary>
         <p>
           Allergies: {patient.allergies || "Not recorded"} · Current medicines:{" "}
           {patient.current_medications || "Not recorded"}
@@ -298,7 +287,7 @@ export function PrescriptionPage({
           age/weight, allergies, pregnancy, organ function and interactions.
           Confirm the patient-specific dose, frequency and duration below.
         </p>
-      </div>
+      </details>
       {brandingError && (
         <div className="control-alert error" role="alert">
           Clinic letterhead could not be loaded: {brandingError}
@@ -307,6 +296,7 @@ export function PrescriptionPage({
           </button>
         </div>
       )}
+      {message && <div className="control-alert" role="status">{dirty && saved ? "Unsaved changes — save to update your prescription." : message}</div>}
       {error && (
         <div className="control-alert error" role="alert">
           {error}
@@ -344,7 +334,7 @@ export function PrescriptionPage({
                 ))}
               </select>
             </label>
-            <span>Latest 50 saved versions</span>
+            <span>{history.length} saved prescriptions · newest date first</span>
             {write && (
               <button
                 className="ghost"
@@ -355,7 +345,7 @@ export function PrescriptionPage({
                     !window.confirm("Discard unsaved prescription changes?")
                   )
                     return;
-                  setItems([]);
+                  setMessage(""); setItems([]);
                   setSaved(null);
                   setDirty(false);
                   setDate(localDate());
@@ -367,7 +357,7 @@ export function PrescriptionPage({
             )}
           </div>
           {write && (
-            <form onSubmit={save} className="rx-editor">
+            <form onSubmit={save} className="rx-editor" onInvalidCapture={event => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }}>
               <fieldset disabled={saving} className="pharmacy-fieldset">
                 <div className="control-fields">
                   <label>
@@ -398,29 +388,20 @@ export function PrescriptionPage({
                 </div>
                 <div className="rx-add">
                   <label>
-                    Medicine · dose · route · frequency
+                    Quick prescription choices
                     <select
                       aria-label="Prescription medicine"
                       value={selected}
-                      onChange={(e) => setSelected(e.target.value)}
+                      onChange={(e) => addMedicine(e.target.value)}
                     >
-                      <option value="">Select from pharmacy</option>
+                      <option value="">Select a medicine to add</option>
                       {meds.map((m) => (
                         <option key={m.key} value={m.key}>
-                          {medicineOption(m)}
+                          {choiceSummary(prescriptionChoice(m, choices[m.key]))}
                         </option>
                       ))}
                     </select>
                   </label>
-                  <button
-                    className="primary"
-                    type="button"
-                    disabled={!selected || items.length >= 30}
-                    onClick={addMedicine}
-                  >
-                    <Plus size={16} />
-                    Add
-                  </button>
                   {manage && (
                     <button
                       className="ghost"
@@ -431,9 +412,6 @@ export function PrescriptionPage({
                     </button>
                   )}
                 </div>
-                {picked && (
-                  <p className="rx-reference">{medicineOption(picked)}</p>
-                )}
                 {!items.length && (
                   <div className="pharmacy-empty">
                     Select a medicine to begin. No medicines are added
@@ -461,6 +439,8 @@ export function PrescriptionPage({
                         <Trash2 size={16} />
                       </button>
                     </div>
+                    <p className="rx-compact-instructions">{choiceSummary(m)}</p>
+                    <details className="rx-instruction-edit"><summary>{completeChoice(m) ? "Edit instructions" : "Edit instructions · complete once, then save as a quick choice"}</summary>
                     <div className="rx-fields">
                       {[
                         [
@@ -567,52 +547,35 @@ export function PrescriptionPage({
                         />
                       </label>
                     </div>
+                    <button type="button" className="ghost" disabled={choiceBusy} onClick={() => void rememberChoice(m)}>Save as quick choice</button>
+                    </details>
                   </article>
                 ))}
                 <div className="rx-actions">
                   <span>Saving keeps a dated copy in the patient record.</span>
                   <button
-                    className="ghost"
-                    disabled={!items.length || (!dirty && !!saved)}
+                    className="primary"
+                    disabled={!items.length || saving || (!dirty && !!saved)}
                     type="submit"
                     value="save"
                   >
-                    {saving ? "Saving…" : "Save prescription"}
+                    {saving ? "Saving…" : saved && !dirty ? "Saved ✓" : "Save prescription"}
                   </button>
-                  <button
-                    className="primary"
-                    disabled={
-                      !items.length || (!dirty && !!saved) || !printReady
-                    }
-                    type="submit"
-                    value="print"
-                  >
-                    <Printer size={16} />
-                    Save & print
-                  </button>
+                  <button className="ghost" type="button" disabled={!saved || dirty || saving || !printReady} onClick={printPrescription}><Printer size={16} />Print prescription</button>
                 </div>
               </fieldset>
             </form>
           )}
           {saved && !dirty ? (
             <>
-              <div className="pharmacy-heading">
-                <h2>Saved patient copy</h2>
-                <button
-                  className="primary"
-                  disabled={saving || !printReady}
-                  onClick={printPrescription}
-                >
-                  <Printer size={16} />
-                  Print prescription
-                </button>
-              </div>
+              <details className="rx-saved-preview"><summary>Preview saved prescription</summary>
+              {!write && <button type="button" className="ghost" disabled={saving || !printReady} onClick={printPrescription}><Printer size={16} />Print prescription</button>}
               <PrescriptionPaper
                 prescription={saved}
                 letterhead={letterhead}
                 logoUrl={logoUrl}
                 patient={patient}
-              />
+              /></details>
             </>
           ) : (
             <p className="pharmacy-muted">

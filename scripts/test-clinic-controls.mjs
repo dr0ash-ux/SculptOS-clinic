@@ -24,4 +24,7 @@ try{await db.exec(readFileSync('supabase/tests/expanded_medicines.sql','utf8'));
 await db.exec(readFileSync('supabase/migrations/20260921124005_clinic_member_identity_actions.sql','utf8'));
 await db.exec(readFileSync('supabase/tests/clinic_member_identity_actions.sql','utf8'));
 console.log('Clinic names, member editing, removal, re-addition, admin protection and cross-clinic access checks passed');
+await db.exec(readFileSync('supabase/migrations/20260921125419_prescription_quick_choices.sql','utf8'));
+await db.exec(readFileSync('supabase/tests/prescription_quick_choices.sql','utf8'));
+console.log('Quick choices persist, dated prescriptions retained, cross-clinic reads and writes blocked');
 await db.close();
