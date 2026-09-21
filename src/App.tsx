@@ -389,9 +389,9 @@ export default function App() {
     if (error) throw new Error(error.message)
     if (!data) throw new Error('The clinical file was not saved. Check your access and try again.')
     setPatients(current => current.map(patient => patient.id === patientId ? data as Patient : patient))
-    setNotice('Clinical file saved. You’re back at appointments.')
+    setNotice('Clinical file saved. Review the treatment plan with your patient.')
     setAppointmentSlot(null)
-    navigateTo('appointments')
+    navigateTo('treatment_plan')
   }
 
   const switchBranch = async (branch: Branch) => {
