@@ -21,4 +21,7 @@ try{await db.exec(readFileSync('supabase/tests/clinic_letterhead.sql','utf8'))}c
 console.log('Compact medicines and clinic letterhead permissions passed');
 await db.exec(readFileSync('supabase/migrations/20260912124956_expanded_dental_medicines.sql','utf8'));
 try{await db.exec(readFileSync('supabase/tests/expanded_medicines.sql','utf8'));console.log('Expanded catalogue, pediatric dosing and emergency route checks passed')}catch(e){console.error('CATALOGUE',e.message);process.exit(1)}
+await db.exec(readFileSync('supabase/migrations/20260921124005_clinic_member_identity_actions.sql','utf8'));
+await db.exec(readFileSync('supabase/tests/clinic_member_identity_actions.sql','utf8'));
+console.log('Clinic names, member editing, removal, re-addition, admin protection and cross-clinic access checks passed');
 await db.close();

@@ -89,6 +89,9 @@ export function AdminPage({
     [confirmSuspend, setConfirmSuspend] = useState(false);
   const member = members.find((m) => m.id === selected),
     person = roster.find((p) => p.membership_id === selected);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('doctor');
   const [colour, setColour] = useState("#28796e"),
     [link, setLink] = useState("");
   const canManage = workspace.role === "admin";
@@ -125,7 +128,7 @@ export function AdminPage({
       onRosterChange(r.data || []);
       setLeaves(l.data || []);
       setAudit(a.data || []);
-      setSelected((current) => current || team.data?.[0]?.id || "");
+      setSelected((current) => (team.data || []).some((m: Member) => m.id === current) ? current : team.data?.[0]?.id || "");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -148,6 +151,9 @@ export function AdminPage({
     setColour(colourHex(person?.schedule_color || "teal"));
     setLink(person?.id || "");
     setConfirmSuspend(false);
+    setEditing(false);
+    setEditName(person?.full_name || member?.full_name || '');
+    setEditRole(member?.role || 'doctor');
   }, [member, person]);
   const dirty =
     !!member &&
@@ -379,14 +385,14 @@ export function AdminPage({
                   Each login has its own access. Roster entries must be linked
                   to a login to use permissions.
                 </p>
-                {roster.some((p) => !p.membership_id) && (
+                  {roster.some((p) => !p.membership_id && p.active) && (
                   <details>
                     <summary>
                       Unlinked roster (
-                      {roster.filter((p) => !p.membership_id).length})
+                      {roster.filter((p) => !p.membership_id && p.active).length})
                     </summary>
                     {roster
-                      .filter((p) => !p.membership_id)
+                      .filter((p) => !p.membership_id && p.active)
                       .map((p) => (
                         <UnlinkedColour
                           key={p.id}
@@ -416,7 +422,7 @@ export function AdminPage({
                       <div className="member-heading">
                         <div>
                           <span className="eyebrow">TEAM MEMBER</span>
-                          <h2>{member.full_name || member.email}</h2>
+                          <h2>{person?.full_name || member.full_name || member.email}</h2>
                           <p>{member.email}</p>
                         </div>
                         <span
@@ -425,6 +431,28 @@ export function AdminPage({
                           {member.active ? "Active login" : "Suspended"}
                         </span>
                       </div>
+                      <div className="control-footer">
+                        <button type="button" className="ghost" disabled={busy || dirty} onClick={() => setEditing(value => !value)}>Edit member</button>
+                        {member.role !== 'admin' && <button type="button" className="ghost danger" disabled={busy || dirty} onClick={() => {
+                          if (!window.confirm(`Remove ${person?.full_name || member.full_name || member.email} from this clinic? Clinic access will be revoked. Appointment and clinical history will be preserved. Their login account will not be deleted.`)) return;
+                          void run(async () => {
+                            const { error } = await supabase.rpc('remove_clinic_member', { target_clinic: workspace.clinicId, target_member: member.id });
+                            if (error) throw error;
+                          }, 'Member removed from this clinic. Historical records are preserved.');
+                        }}>Remove from clinic</button>}
+                      </div>
+                      {editing && <form className="control-fields" onSubmit={e => {
+                        e.preventDefault();
+                        void run(async () => {
+                          const { error } = await supabase.rpc('edit_clinic_member', { target_clinic: workspace.clinicId, target_member: member.id, staff_name: editName.trim(), member_role: editRole });
+                          if (error) throw error;
+                        }, 'Team member details saved.');
+                      }}>
+                        <label>Doctor / staff name<input required minLength={2} maxLength={120} value={editName} onChange={e => setEditName(e.target.value)} disabled={busy} /></label>
+                        <label>Clinic role<select value={editRole} onChange={e => setEditRole(e.target.value)} disabled={busy || member.role === 'admin'}>{(member.role === 'admin' ? ['admin'] : ['doctor','receptionist','assistant','accountant','manager']).map(role => <option key={role}>{role}</option>)}</select></label>
+                        <p className="span-all">Login email: {member.email}. Use the team member’s own verified account. Editing their clinic name does not change the login account.</p>
+                        <div className="control-footer span-all"><button type="button" className="ghost" disabled={busy} onClick={() => setEditing(false)}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save member'}</button></div>
+                      </form>}
                       <div className="member-meta">
                         <span>
                           <b>Role</b>
