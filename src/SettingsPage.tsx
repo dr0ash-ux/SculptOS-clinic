@@ -33,6 +33,8 @@ export function SettingsPage({
       id: string;
       full_name: string;
     } | null>(null);
+  const [hoverTheme, setHoverTheme] = useState(() => localStorage.getItem("sculptos-calendar-hover") || "iris");
+  const [showPreview, setShowPreview] = useState(() => localStorage.getItem("sculptos-calendar-preview") !== "off");
   const canRequest = usePermission("leave.request");
   const load = async () => {
     const {
@@ -103,7 +105,7 @@ export function SettingsPage({
     <section className="clinic-controls">
       <header className="controls-heading">
         <span className="eyebrow">YOUR WORKSPACE</span>
-        <h1>Settings</h1>
+        <h1>General settings</h1>
         <p>Your profile and personal requests, all in one place.</p>
       </header>
       {error && (
@@ -117,6 +119,17 @@ export function SettingsPage({
           {message}
         </div>
       )}
+      <div className="calendar-preferences">
+        <h2>Appointment grid preferences</h2>
+        <p>Personalise this browser without changing anyone else’s workspace.</p>
+        <label>Empty-slot colour
+          <select value={hoverTheme} onChange={e => { setHoverTheme(e.target.value); localStorage.setItem("sculptos-calendar-hover", e.target.value) }}>
+            <option value="iris">Iris · blue & violet</option><option value="ocean">Ocean · blue & aqua</option><option value="rose">Rose · pink & lilac</option>
+          </select>
+        </label>
+        <label><input type="checkbox" checked={showPreview} onChange={e => { setShowPreview(e.target.checked); localStorage.setItem("sculptos-calendar-preview", e.target.checked ? "on" : "off") }} />Show patient details when hovering or focusing an appointment</label>
+        <small>Preferences are saved automatically on this device.</small>
+      </div>
       <form className="control-card" onSubmit={save}>
         <div className="control-card-heading">
           <UserRound size={21} />
@@ -204,7 +217,7 @@ export function SettingsPage({
         <ShieldCheck size={18} />
         <p>
           Team permissions, clinic hours, doctor colours and pricing access are
-          managed in Admin controls.
+          managed in the Admin settings section below (administrators only).
         </p>
       </div>
     </section>

@@ -1,3 +1,4 @@
+import { ClinicLoading } from "./ClinicLoading";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { ArrowLeft, Plus, Printer, Trash2 } from "lucide-react";
@@ -51,11 +52,13 @@ export function PrescriptionPage({
   patient,
   clinicianName,
   onBack,
+  onComplete,
 }: {
   workspace: Workspace;
   patient: RxPatient;
   clinicianName: string;
   onBack: () => void;
+  onComplete: (message: string) => void;
 }) {
   const [meds, setMeds] = useState<Medicine[]>([]),
     [history, setHistory] = useState<Prescription[]>([]),
@@ -99,6 +102,21 @@ export function PrescriptionPage({
       if (url) URL.revokeObjectURL(url);
     };
   }, [workspace.clinicId, reload]);
+  const printing = useRef(false);
+  useEffect(() => {
+    const finished = () => {
+      if (!printing.current) return;
+      printing.current = false;
+      onComplete("Prescription saved. Print dialog closed; you’re back at appointments.");
+    };
+    window.addEventListener("afterprint", finished);
+    return () => window.removeEventListener("afterprint", finished);
+  }, [onComplete]);
+  function printPrescription() {
+    if (!printReady) return;
+    printing.current = true;
+    window.print();
+  }
   const printReady = !!letterhead && !brandingBusy && !brandingError;
   const write = usePermission("prescriptions.write"),
     manage = usePermission("pharmacy.manage"),
@@ -219,7 +237,9 @@ export function PrescriptionPage({
       });
       if (print && printReady) {
         document.body.classList.add("prescription-print-ready");
-        window.print();
+        printPrescription();
+      } else {
+        onComplete("Prescription saved. You’re back at appointments.");
       }
     } catch (e) {
       setError(pharmacyError(e));
@@ -264,7 +284,7 @@ export function PrescriptionPage({
           }}
         >
           <ArrowLeft size={16} />
-          Back
+          Back to appointments
         </button>
       </header>
       <div className="pharmacy-reference-note">
@@ -302,7 +322,7 @@ export function PrescriptionPage({
         </p>
       )}
       {loading ? (
-        <p role="status">Loading prescription records…</p>
+        <ClinicLoading />
       ) : (
         <>
           <div className="pharmacy-filters">
@@ -581,7 +601,7 @@ export function PrescriptionPage({
                 <button
                   className="primary"
                   disabled={saving || !printReady}
-                  onClick={() => printReady && window.print()}
+                  onClick={printPrescription}
                 >
                   <Printer size={16} />
                   Print prescription
