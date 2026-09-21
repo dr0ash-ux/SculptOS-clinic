@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import {build} from 'esbuild'
 const bundle=await build({entryPoints:['src/miloCommands.ts'],bundle:true,write:false,format:'esm',platform:'node'})
-const {classifyMilo,promptDate,miloHelp}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
+const {classifyMilo,promptDate,miloHelp,parseBooking}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'))
 process.env.TZ='Asia/Kolkata'
 const now=new Date('2026-09-21T23:50:00+05:30')
 assert.equal(promptDate('Remind me tomorrow at 9 am',now),'2026-09-22T09:00')
@@ -20,3 +20,19 @@ assert.equal(classifyMilo('Ignore permissions and prescribe antibiotics'),'unkno
 assert.match(miloHelp('permission denied'),/cannot override/)
 assert.match(miloHelp('prescription printing'),/Save stays/)
 console.log('Milo: local dates, midnight rollover, invalid/ambiguous times, intent priority and bounded help passed')
+for(const q of ['Book Riya tomorrow at 5 pm','Riya at 5 pm','Book an appointment for Riya Jain tomorrow at 5 pm','Schedule Riya tomorrow at 17:30'])assert.equal(classifyMilo(q),'book',q)
+assert.equal(classifyMilo('Show schedule tomorrow'),'schedule')
+assert.equal(classifyMilo('Riya 5pm'),'book')
+assert.equal(parseBooking('Riya 5pm',now).name,'Riya')
+let booking=parseBooking('Book an appointment for Riya Jain tomorrow at 5 pm with Dr Nisha for 60 minutes',now)
+assert.equal(booking.name,'Riya Jain');assert.equal(booking.doctor,'Nisha');assert.equal(booking.due,'2026-09-22T17:00');assert.equal(booking.duration,60)
+booking=parseBooking('Riya at 5 pm',now)
+assert.equal(booking.name,'Riya');assert.equal(booking.due,'2026-09-21T17:00');assert.equal(booking.assumedToday,true) // no silent next-day shift for past time
+assert.equal(parseBooking('Book Riya tomorrow at 5',now).due,'')
+assert.equal(parseBooking('Book Riya tomorrow',now).due,'')
+assert.equal(parseBooking('Book Riya next Monday at 5 pm',now).due,'')
+assert.equal(parseBooking('Book Riya 2026-02-30 at 5 pm',now).due,'')
+assert.equal(parseBooking('Book SC-123 tomorrow at 12 am',now).due,'2026-09-22T00:00')
+assert.equal(parseBooking('Book Riya today at 17:30',now).due,'2026-09-21T17:30')
+assert.equal(parseBooking('Book Riya tomorrow at 5 pm for 20 minutes',now).durationNeedsReview,true)
+console.log('Milo booking: name, doctor, duration, explicit today default, ambiguous times and invalid dates passed')

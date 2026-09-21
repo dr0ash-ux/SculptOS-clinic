@@ -4,21 +4,23 @@ import { supabase } from './lib/supabase'
 import { classifyMilo, localInput, miloHelp, promptDate } from './miloCommands'
 import mascot from './milo.webp.b64?raw'
 import './MiloAssistant.css'
+import { MiloBooking, MiloBookingEntry, MiloDoctor } from './MiloBooking'
 
 type Patient = { id:string; first_name:string; last_name:string|null; patient_number:string; next_follow_up_date:string|null }
 type Reminder = {id:string;title:string;due_at:string;completed_at:string|null}
 type Action = {label:string;run:()=>void}
 type Message = {id:number;role:'user'|'milo';text:string;actions?:Action[]}
 export type MiloPage = 'appointments'|'patients'|'inventory'|'settings'|'prescriptions'
-type Props = {clinicId:string; clinicName:string; access:Set<string>; currentPage:string; onNavigate:(page:MiloPage)=>void; onPatient:(id:string)=>void; onBook:(date:Date,patientId:string|null)=>void}
+type Props = {clinicId:string; clinicName:string; access:Set<string>; currentPage:string; doctors:MiloDoctor[]; onNavigate:(page:MiloPage)=>void; onPatient:(id:string)=>void; onConfirmBooking:(entry:MiloBookingEntry,requestId:string)=>Promise<string|void>}
 const welcome='Hi, I’m Milo. Tiny assistant, tidy clinic. I can find patients, check your schedule, prepare a booking, save reminders and explain common app errors. Try a shortcut below.'
 const permission:Record<MiloPage,string>={appointments:'appointments.manage',patients:'patients.view',inventory:'inventory.view',prescriptions:'pharmacy.view',settings:''}
-export function MiloAssistant({clinicId,clinicName,access,currentPage,onNavigate,onPatient,onBook}:Props) {
+export function MiloAssistant({clinicId,clinicName,access,currentPage,doctors,onNavigate,onPatient,onConfirmBooking}:Props) {
   const [open,setOpen]=useState(false), [tab,setTab]=useState<'chat'|'reminders'>('chat')
   const [messages,setMessages]=useState<Message[]>([{id:0,role:'milo',text:welcome}])
   const [input,setInput]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('')
   const [reminders,setReminders]=useState<Reminder[]>([]),[clock,setClock]=useState(Date.now())
-  const [draft,setDraft]=useState<{kind:'reminder'|'booking';title:string;due:string;id:string}|null>(null)
+  const [draft,setDraft]=useState<{kind:'reminder';title:string;due:string;id:string}|null>(null)
+  const [booking,setBooking]=useState<{prompt:string;id:string}|null>(null)
   const [saving,setSaving]=useState(false)
   const end=useRef<HTMLDivElement>(null),field=useRef<HTMLInputElement>(null),launcher=useRef<HTMLButtonElement>(null)
   const live=useRef(true), inFlight=useRef(false), sequence=useRef(1)
@@ -50,13 +52,15 @@ export function MiloAssistant({clinicId,clinicName,access,currentPage,onNavigate
     if(!window.confirm('Open this clinical file? Save any unfinished work before continuing.'))return
     onPatient(id);close()
   }
-  const newDraft=(kind:'reminder'|'booking',q:string)=>{
+  const newDraft=(kind:'reminder',q:string)=>{
+    if(inFlight.current&&saving)return
+    setBooking(null)
     setDraft({kind,title:kind==='reminder'?q.replace(/^(?:please\s+)?(?:remind me|set (?:a )?reminder|create (?:a )?reminder)\s*(?:to\s*)?/i,'').slice(0,240):'',due:promptDate(q),id:crypto.randomUUID()})
     say(kind==='reminder'?'Check the reminder text and local date/time below, then choose Save reminder.':'Choose the appointment date/time below. Next I’ll open the booking form for you to select the patient and doctor and confirm. Nothing has been booked yet.')
   }
   const run=async(q:string)=>{
-    if(inFlight.current||!q.trim())return
-    inFlight.current=true;setBusy(true);setInput('');setTab('chat');setDraft(null)
+    if(inFlight.current||saving||!q.trim())return
+    inFlight.current=true;setBusy(true);setInput('');setTab('chat');setDraft(null);setBooking(null)
     setMessages(old=>[...old.slice(-39),{id:sequence.current++,role:'user',text:q}])
     try{
       switch(classifyMilo(q)){
@@ -65,7 +69,8 @@ export function MiloAssistant({clinicId,clinicName,access,currentPage,onNavigate
         case 'help':say(miloHelp(q));break
         case 'book':
           if(!allowed('appointments.manage')){say('Booking requires appointment access. Ask your clinic administrator.');break}
-          newDraft('booking',q);break
+          if(!allowed('patients.view')){say('Booking by name also needs patient lookup access. Ask your clinic administrator.');break}
+          setBooking({prompt:q,id:crypto.randomUUID()});say('I’ll find that patient. Check the name, date and doctor below, then choose Confirm booking.');break
         case 'patients':{
           if(!allowed('patients.view')){say('Patient lookup is not enabled for your login.');break}
           const term=q.replace(/^.*?\b(?:find|search(?: for)?|look up)\s+(?:patient\s+)?/i,'').replace(/[^\p{L}\p{N}\s-]/gu,'').trim().slice(0,80)
@@ -119,11 +124,6 @@ export function MiloAssistant({clinicId,clinicName,access,currentPage,onNavigate
     e.preventDefault();if(!draft||inFlight.current)return
     const when=new Date(draft.due)
     if(!Number.isFinite(when.getTime())||when.getTime()<=Date.now()){say('Choose a valid future date and time.');return}
-    if(draft.kind==='booking'){
-      if(!allowed('appointments.manage'))return
-      if(!window.confirm('Open the booking form? Save any unfinished work first.'))return
-      onBook(when,null);setDraft(null);close();return
-    }
     if(!draft.title.trim())return
     inFlight.current=true;setSaving(true)
     try{
@@ -150,6 +150,7 @@ export function MiloAssistant({clinicId,clinicName,access,currentPage,onNavigate
       <div className="milo-context">{currentPage.replaceAll('_',' ')} · Basic command mode</div>
       {tab==='chat'?<>
         <div className="milo-chat" role="log" aria-live="polite" aria-relevant="additions">{messages.map(m=><div key={m.id} className={`milo-message ${m.role}`}><small>{m.role==='milo'?'MILO':'YOU'}</small><p>{m.text}</p>{m.actions&&<div className="milo-actions">{m.actions.map((a,i)=><button type="button" key={i} onClick={a.run}>{a.label}</button>)}</div>}</div>)}{busy&&<p role="status">Assembling the little details…</p>}<div ref={end}/></div>
+        {booking&&allowed('appointments.manage')&&allowed('patients.view')&&<MiloBooking key={booking.id} prompt={booking.prompt} clinicId={clinicId} doctors={doctors} onConfirm={onConfirmBooking} onBusy={value=>{inFlight.current=value;setSaving(value)}} onCancel={()=>setBooking(null)} onSaved={message=>{setBooking(null);say(message,[{label:'Open appointment grid',run:()=>navigate('appointments')}])}}/>}
         {draft&&<form className="milo-draft" onSubmit={saveDraft}><strong>{draft.kind==='reminder'?'Review reminder':'Prepare appointment'}</strong>{draft.kind==='reminder'&&<label>Remind me to<input maxLength={240} required value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})}/></label>}<label>Date & time · {Intl.DateTimeFormat().resolvedOptions().timeZone}<input type="datetime-local" required value={draft.due} onChange={e=>setDraft({...draft,due:e.target.value})}/></label><div className="milo-actions"><button type="submit" disabled={saving}>{saving?'Saving…':draft.kind==='reminder'?'Save reminder':'Review booking'}</button><button type="button" disabled={saving} onClick={()=>setDraft(null)}>Cancel</button></div></form>}
         <div className="milo-shortcuts">{['Today’s appointments','Follow-ups this week','Low stock','Help with saving'].map(q=><button key={q} type="button" disabled={busy||saving} onClick={()=>void run(q)}>{q}</button>)}</div>
         <form className="milo-input" onSubmit={e=>{e.preventDefault();void run(input)}}><input ref={field} aria-label="Ask Milo" placeholder="Ask, find, or remind me…" maxLength={500} value={input} disabled={busy||saving} onChange={e=>setInput(e.target.value)}/><button type="submit" aria-label="Send to Milo" disabled={busy||saving||!input.trim()}><Send size={18}/></button></form>

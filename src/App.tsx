@@ -308,8 +308,27 @@ export default function App() {
     setSelectedPatientId(patientId)
     setView('patient_file')
   }
-  const createAppointment = async (entry: Omit<Appointment, 'id'>) => {
-    if (!workspace) return
+  const createAppointment = async (entry: Omit<Appointment, 'id'>, options?: { requestId: string; stay: boolean }) => {
+    if (!workspace) return 'Your clinic session is unavailable.'
+    const finish = (saved: Appointment) => {
+      if (currentClinicRef.current !== workspace.clinicId) return
+      setAppointments(current => [...current.filter(a => a.id !== saved.id), saved].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)))
+      if (!options?.stay) {
+        setAppointmentSlot(null)
+        setWeekStart(startOfWeek(new Date(saved.scheduled_at)))
+        navigateTo('appointments')
+      }
+      setNotice('Appointment saved and added to the schedule.')
+    }
+    if (options?.requestId) {
+      const previous = await supabase.from('appointments').select('*').eq('clinic_id', workspace.clinicId).eq('id', options.requestId).maybeSingle()
+      if (previous.error) return previous.error.message
+      if (previous.data) {
+        if (previous.data.patient_id !== entry.patient_id || previous.data.clinician_name !== entry.clinician_name || new Date(previous.data.scheduled_at).getTime() !== new Date(entry.scheduled_at).getTime() || previous.data.duration_minutes !== entry.duration_minutes) return 'This request was already saved with earlier details. Open the appointment grid to review it before making another booking.'
+        finish(previous.data as Appointment); return
+      }
+    }
+    if (options && new Date(entry.scheduled_at).getTime() <= Date.now()) return 'Choose a future appointment time.'
     const date = new Date(entry.scheduled_at), startMinute = date.getHours() * 60 + date.getMinutes()
     if (!access.has('appointments.manage') || !activeDoctors.some(doctor => doctor.name === entry.clinician_name)) return 'Choose an active doctor and check your appointment permission.'
     if (clinicSchedule.closedDays.includes(date.getDay()) || startMinute < minutesFromTime(clinicSchedule.open) || startMinute + entry.duration_minutes > minutesFromTime(clinicSchedule.close)) return 'Choose a time and duration within clinic opening hours.'
@@ -317,6 +336,7 @@ export default function App() {
     if (clinicSchedule.leaves.some(item => item.doctor === entry.clinician_name && dateKey(date) >= item.startDate && dateKey(date) <= item.endDate && startMinute < minutesFromTime(item.endTime) && startMinute + entry.duration_minutes > minutesFromTime(item.startTime))) return 'This doctor is on leave for the selected appointment time.'
     const { data, error } = await supabase.from('appointments').insert({
       ...entry,
+      ...(options?.requestId ? { id: options.requestId } : {}),
       organization_id: workspace.organizationId,
       clinic_id: workspace.clinicId,
       created_by: (await supabase.auth.getUser()).data.user?.id,
@@ -324,11 +344,7 @@ export default function App() {
     if (error) {
       return error.code === '23P01' ? 'This doctor is already booked for part of that time.' : error.message
     }
-    setAppointments(current => [...current, data as Appointment].sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)))
-    setAppointmentSlot(null)
-    setWeekStart(startOfWeek(new Date(entry.scheduled_at)))
-    navigateTo('appointments')
-    setNotice('Appointment saved and added to the schedule.')
+    finish(data as Appointment)
   }
   const createPatient = async (values: typeof emptyPatient) => {
     if (!workspace) return
@@ -485,7 +501,7 @@ export default function App() {
         </>}
       </div>
     </main>
-    <MiloAssistant key={`${workspace.clinicId}-${email}`} clinicId={workspace.clinicId} clinicName={workspace.clinicName} access={access} currentPage={view} onNavigate={navigateTo} onPatient={id=>{void supabase.from('patients').select('*').eq('clinic_id',workspace.clinicId).eq('id',id).single().then(({data,error})=>{if(currentClinicRef.current!==workspace.clinicId)return;if(error||!data){setNotice('Could not open that patient. Check your connection and access.');return}setPatients(current=>[...current.filter(p=>p.id!==id),data as Patient]);openPatient(id)})}} onBook={(date,patientId)=>{if(!activeDoctors.length){setNotice('Add an active doctor in Admin settings before booking.');return}setSelectedPatientId(patientId);setView('appointments');setAppointmentSlot({date,label:formatTime(date.toISOString())})}} />
+    <MiloAssistant key={`${workspace.clinicId}-${email}`} clinicId={workspace.clinicId} clinicName={workspace.clinicName} access={access} currentPage={view} onNavigate={navigateTo} onPatient={id=>{void supabase.from('patients').select('*').eq('clinic_id',workspace.clinicId).eq('id',id).single().then(({data,error})=>{if(currentClinicRef.current!==workspace.clinicId)return;if(error||!data){setNotice('Could not open that patient. Check your connection and access.');return}setPatients(current=>[...current.filter(p=>p.id!==id),data as Patient]);openPatient(id)})}} doctors={activeDoctors} onConfirmBooking={(entry,requestId)=>createAppointment(entry,{requestId,stay:true})} />
     {patientModalOpen && access.has('patients.create') && <PatientModal onClose={() => setPatientModalOpen(false)} onSave={createPatient} />}
     {appointmentSlot && access.has('appointments.manage') && activeDoctors.length>0 && view !== 'booking' && <AppointmentModal doctors={activeDoctors} slot={appointmentSlot} patients={patients} selectedPatientId={selectedPatientId} onClose={() => setAppointmentSlot(null)} onSave={createAppointment} />}
   </div></AccessContext.Provider>

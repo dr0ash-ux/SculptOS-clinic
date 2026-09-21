@@ -5,13 +5,39 @@ export function classifyMilo(input: string): MiloIntent {
   if (/\b(remind me|set (a )?reminder|create (a )?reminder)\b/.test(q)) return 'reminder'
   if (/\b(reminders|my tasks)\b/.test(q)) return 'reminders'
   if (/\b(error|failed|cannot|can't|unable|why|how|help|not working|won't)\b/.test(q)) return 'help'
-  if (/\b(book|schedule|make)\b.*\b(appointment|visit)\b/.test(q)) return 'book'
+  if (/^(?:(?:please|can you|could you)\s+)*(?:book\b|schedule\s+(?!today|tomorrow|for\b)|make\s+(?:an?\s+)?appointment)/.test(q)) return 'book'
   if (/\bfollow[ -]?ups?\b/.test(q)) return 'followups'
   if (/\b(find|search|look up)\b/.test(q)) return 'patients'
   if (/\b(low stock|running low|inventory|stock)\b/.test(q)) return 'inventory'
   if (/\b(appointments|schedule|calendar)\b/.test(q)) return 'schedule'
   if (/\b(open|go to|take me|show)\b/.test(q)) return 'navigate'
+  if (/^[\p{L}][\p{L}\s.'’-]+\s+(?:today\s+|tomorrow\s+)?at\s+\d/iu.test(q)) return 'book'
+  if (/^[\p{L}][\p{L}\s.'’-]+\s+(?:(?:today|tomorrow)\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/iu.test(q)) return 'book'
   return 'unknown'
+}
+
+export function parseBooking(input:string, now=new Date()) {
+  const q=input.trim(), lower=q.toLowerCase()
+  const doctor=q.match(/\bwith\s+(?:dr\.?\s*)?(.+?)(?=\s+(?:today|tomorrow|at|on|for|in|next)\b|\s+\d{4}-\d{2}-\d{2}|$)/i)?.[1]?.trim()||''
+  let name=q.replace(/^(?:(?:please|can you|could you)\s+)*(?:book|schedule|make)\s+/i,'').replace(/^(?:an?\s+)?(?:appointment|visit)\s*(?:for\s+)?/i,'').replace(/^(?:for\s+)?(?:patient\s+|pt\.?\s+)?/i,'')
+  name=name.split(/\s+(?:today|tomorrow|at|on|with|in|next|for\s+\d)\b|\s+\d{4}-\d{2}-\d{2}|\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i)[0].trim()
+  const durationMatch=lower.match(/\bfor\s+(\d+)\s*(minutes?|mins?|hours?|hrs?)\b/)
+  const duration=durationMatch?+durationMatch[1]*(/^(hour|hr)/.test(durationMatch[2])?60:1):30
+  const time=q.match(/\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b|\bat\s+(\d{1,2}):(\d{2})\b/i)
+  let due='',assumedToday=false
+  if(time){
+    const hour=time[3]?+time[1]:+time[4],minute=+(time[2]||time[5]||0)
+    if(minute<=59&&((time[3]&&hour>=1&&hour<=12)||(!time[3]&&hour<=23))){
+      const h=time[3]?hour%12+(time[3].toLowerCase()==='pm'?12:0):hour
+      let dateText=lower
+      const hasDate=/\btoday\b|\btomorrow\b|\d{4}-\d{2}-\d{2}|\bin\s+\d+\s+(?:days?|weeks?)/.test(lower)
+      const unsupported=/\b(next|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|yesterday)\b/.test(lower)
+      if(!hasDate&&!unsupported){dateText+=' today';assumedToday=true}
+      const day=promptDate(dateText.replace(/\bat\s+\d{1,2}(?::\d{2})?\s*(am|pm)?\b/g,''),now)
+      if(day)due=day.slice(0,10)+`T${String(h).padStart(2,'0')}:${String(minute).padStart(2,'0')}`
+    }
+  }
+  return {name,doctor,due,duration:[15,30,45,60,90,120].includes(duration)?duration:30,assumedToday,durationNeedsReview:!([15,30,45,60,90,120].includes(duration))}
 }
 export function localInput(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0')
